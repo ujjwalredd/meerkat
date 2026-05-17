@@ -54,18 +54,45 @@ if [ -z "${INSTALL_DIR:-}" ]; then
   fi
 fi
 
-# Resolve version
+install_via_go() {
+  local ver="$1"
+  command -v go >/dev/null 2>&1 || err "no prebuilt binary and Go not installed.
+Install Go 1.22+ (https://go.dev/dl) and rerun, or use the npm path:
+  npx meerkat-cli@latest init wizard"
+  say "falling back to: go install (ref=${ver})"
+  GOBIN="$INSTALL_DIR" go install "github.com/${REPO}/cmd/meerkat@${ver}" \
+    || err "go install failed for ref ${ver}"
+  say "installed via go: ${INSTALL_DIR}/meerkat${EXT}"
+}
+
+# Resolve version. No releases yet -> jump straight to go install of main.
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
 if [ "$VERSION" = "latest" ]; then
   say "resolving latest release"
-  VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-            | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
-  [ -n "$VERSION" ] || err "could not resolve latest version (set MEERKAT_VERSION=vX.Y.Z)"
+  HTTP_CODE=$(curl -fsSL -o "$TMP/rel.json" -w '%{http_code}' \
+              "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || echo "000")
+  if [ "$HTTP_CODE" = "200" ]; then
+    VERSION=$(sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' "$TMP/rel.json" | head -n1)
+  else
+    VERSION=""
+  fi
+  if [ -z "$VERSION" ]; then
+    say "no published releases for ${REPO} yet (HTTP ${HTTP_CODE})"
+    install_via_go "latest"
+    "${INSTALL_DIR}/meerkat${EXT}" version || true
+    say "next: cd into a project and run:  meerkat init"
+    case ":$PATH:" in
+      *":$INSTALL_DIR:"*) ;;
+      *) say "add to your shell profile:  export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
+    esac
+    exit 0
+  fi
 fi
 say "installing meerkat ${VERSION} for ${OS}/${ARCH}"
 
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
 
 if curl -fsSL -o "$TMP/${ASSET}" "$URL" 2>/dev/null; then
   chmod +x "$TMP/${ASSET}"
@@ -73,14 +100,7 @@ if curl -fsSL -o "$TMP/${ASSET}" "$URL" 2>/dev/null; then
   say "installed: ${INSTALL_DIR}/meerkat${EXT}"
 else
   say "no prebuilt asset at ${URL}"
-  if command -v go >/dev/null 2>&1; then
-    say "falling back to: go install"
-    GOBIN="$INSTALL_DIR" go install "github.com/${REPO#*/}/cmd/meerkat@${VERSION}" || \
-    GOBIN="$INSTALL_DIR" go install "github.com/${REPO}/cmd/meerkat@${VERSION}"
-    say "installed via go: ${INSTALL_DIR}/meerkat"
-  else
-    err "no prebuilt binary and Go not installed. Install Go 1.22+ or use: npx meerkat-cli@latest init"
-  fi
+  install_via_go "${VERSION}"
 fi
 
 # PATH hint
