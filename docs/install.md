@@ -33,7 +33,7 @@ Environment overrides:
 
 | Env var | Purpose |
 |---------|---------|
-| `MEERKAT_VERSION=v0.4.0` | Pin a specific release |
+| `MEERKAT_VERSION=v0.4.1` | Pin a specific release |
 | `INSTALL_DIR=/path/to/bin` | Custom install location |
 | `MEERKAT_REPO=owner/name` | Use a fork |
 | `MEERKAT_SETUP_CLAUDE=1` | Also run `meerkat claude install` after installing the binary |
@@ -141,7 +141,7 @@ Claude (and any MCP-aware agent) can then call `meerkat.explain`,
 ## Verify
 
 ```bash
-meerkat version            # → meerkat 0.4.0
+meerkat version            # → meerkat 0.4.1
 meerkat doctor             # → PATH, Claude hooks, policy, sandbox, keep-awake
 meerkat doctor --online    # → also checks GitHub release asset availability
 meerkat sandbox doctor     # → available sandbox backends, what Auto picks

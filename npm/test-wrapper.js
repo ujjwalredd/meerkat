@@ -40,7 +40,7 @@ const cached = cachedBinaryPath("/tmp/meerkat-home", {
 }, false);
 assert.strictEqual(
   cached,
-  path.join("/tmp/meerkat-home", ".meerkat", "bin", "meerkat-0.4.0-linux-amd64"),
+  path.join("/tmp/meerkat-home", ".meerkat", "bin", "meerkat-0.4.1-linux-amd64"),
 );
 
 console.log("npm wrapper tests passed");

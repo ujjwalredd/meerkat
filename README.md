@@ -11,7 +11,7 @@
   <a href="https://github.com/ujjwalredd/meerkat/actions/workflows/ci.yml"><img src="https://github.com/ujjwalredd/meerkat/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/ujjwalredd/meerkat/actions/workflows/release.yml"><img src="https://github.com/ujjwalredd/meerkat/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <img src="https://img.shields.io/badge/go-1.22%2B-00ADD8.svg" alt="Go">
-  <img src="https://img.shields.io/badge/status-v0.4-orange.svg" alt="Status">
+  <img src="https://img.shields.io/badge/status-v0.4.1-orange.svg" alt="Status">
 </p>
 
 Local CLI security wrapper for AI coding agents and long-running developer

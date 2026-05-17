@@ -5,6 +5,31 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-17
+
+### Added
+- Tag-driven GitHub Release workflow now verifies, cross-builds release
+  binaries, publishes checksums, signs checksums with keyless Sigstore,
+  emits an SPDX SBOM, and creates GitHub artifact attestations.
+- npm wrapper tests now validate platform mapping, release URL construction,
+  and cache path generation.
+- New docs: release process, short security model, and FAQ.
+- `meerkat doctor` now reports PATH, Claude hook installation, policy state,
+  sandbox backend availability, and optional `--online` release-asset checks.
+
+### Changed
+- Command classification is now shell-aware: it respects quoted strings,
+  path-qualified binaries, `env` wrappers, `sh -c`, chains, pipes, redirects,
+  and `git -C`.
+- CI now runs installer syntax checks and npm wrapper tests.
+- Local release builds use `CGO_ENABLED=0` for cross-platform artifacts.
+
+### Fixed
+- Installers verify release checksums when available and support strict
+  checksum/no-Go-fallback modes.
+- Chained or redirected commands no longer get silently auto-approved just
+  because the first segment matched a low-risk pattern.
+
 ## [0.4.0] - 2026-05-17
 
 ### Added

@@ -10,7 +10,7 @@
 # Falls back to `go install` if no binary matches and Go >= 1.22 is present.
 #
 # Env overrides:
-#   MEERKAT_VERSION=v0.4.0         pin a specific release
+#   MEERKAT_VERSION=v0.4.1         pin a specific release
 #   INSTALL_DIR=/path/to/bin       install location
 #   MEERKAT_REPO=owner/name        for forks
 #   MEERKAT_SETUP_CLAUDE=1         also install Claude Code /meerkat hooks
