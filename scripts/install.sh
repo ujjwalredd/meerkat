@@ -14,15 +14,21 @@
 #   INSTALL_DIR=/path/to/bin       install location
 #   MEERKAT_REPO=owner/name        for forks
 #   MEERKAT_SETUP_CLAUDE=1         also install Claude Code /meerkat hooks
+#   MEERKAT_REQUIRE_CHECKSUM=1     fail if checksums.txt is unavailable
+#   MEERKAT_INSTALL_NO_GO_FALLBACK=1
+#                                   fail instead of falling back to go install
 
 set -euo pipefail
 
 REPO="${MEERKAT_REPO:-ujjwalredd/meerkat}"
 VERSION="${MEERKAT_VERSION:-latest}"
 SETUP_CLAUDE="${MEERKAT_SETUP_CLAUDE:-0}"
+REQUIRE_CHECKSUM="${MEERKAT_REQUIRE_CHECKSUM:-0}"
+NO_GO_FALLBACK="${MEERKAT_INSTALL_NO_GO_FALLBACK:-0}"
 
 err() { printf 'meerkat-install: %s\n' "$*" >&2; exit 1; }
 say() { printf '==> %s\n' "$*"; }
+warn() { printf 'meerkat-install: warning: %s\n' "$*" >&2; }
 
 need() { command -v "$1" >/dev/null 2>&1 || err "missing required tool: $1"; }
 need curl
@@ -57,6 +63,9 @@ mkdir -p "$INSTALL_DIR"
 
 install_via_go() {
   local ver="$1"
+  if [ "$NO_GO_FALLBACK" = "1" ] || [ "$NO_GO_FALLBACK" = "true" ]; then
+    err "no prebuilt binary available and MEERKAT_INSTALL_NO_GO_FALLBACK=1"
+  fi
   command -v go >/dev/null 2>&1 || err "no prebuilt binary and Go not installed.
 Install Go 1.22+ (https://go.dev/dl) and rerun, or use the npm path:
   npx meerkat-cli@latest init wizard"
@@ -64,6 +73,43 @@ Install Go 1.22+ (https://go.dev/dl) and rerun, or use the npm path:
   GOBIN="$INSTALL_DIR" go install "github.com/${REPO}/cmd/meerkat@${ver}" \
     || err "go install failed for ref ${ver}"
   say "installed via go: ${INSTALL_DIR}/meerkat${EXT}"
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+    return 0
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+    return 0
+  fi
+  return 1
+}
+
+verify_checksum() {
+  local file="$1"
+  local checksums="$TMP/checksums.txt"
+  local checksums_url="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
+
+  if ! curl -fsSL -o "$checksums" "$checksums_url" 2>/dev/null; then
+    if [ "$REQUIRE_CHECKSUM" = "1" ] || [ "$REQUIRE_CHECKSUM" = "true" ]; then
+      err "checksums.txt unavailable at ${checksums_url}"
+    fi
+    warn "checksums.txt unavailable for ${VERSION}; continuing without checksum verification"
+    return 0
+  fi
+
+  local expected actual
+  expected=$(awk -v asset="$ASSET" '$2 == asset {print $1}' "$checksums" | head -n1)
+  if [ -z "$expected" ]; then
+    err "checksums.txt does not contain an entry for ${ASSET}"
+  fi
+  actual=$(sha256_file "$file") || err "missing sha256sum or shasum for checksum verification"
+  if [ "$actual" != "$expected" ]; then
+    err "checksum mismatch for ${ASSET}: expected ${expected}, got ${actual}"
+  fi
+  say "verified checksum for ${ASSET}"
 }
 
 finish_install() {
@@ -106,12 +152,18 @@ if [ "$VERSION" = "latest" ]; then
     finish_install
     exit 0
   fi
+else
+  case "$VERSION" in
+    v*) ;;
+    *) VERSION="v${VERSION}" ;;
+  esac
 fi
 say "installing meerkat ${VERSION} for ${OS}/${ARCH}"
 
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
 
 if curl -fsSL -o "$TMP/${ASSET}" "$URL" 2>/dev/null; then
+  verify_checksum "$TMP/${ASSET}"
   chmod +x "$TMP/${ASSET}"
   mv "$TMP/${ASSET}" "${INSTALL_DIR}/meerkat${EXT}"
   say "installed: ${INSTALL_DIR}/meerkat${EXT}"

@@ -35,8 +35,11 @@ Matching rules:
 - **Whole-token prefix.** `npm test` matches `npm test`, `npm test --watch`,
   `npm test -- --grep auth`. It does **not** match `npm testfoo`.
 - **Single-token patterns** like `claude` or `sudo` match the binary
-  invocation, using regex word boundaries.
+  invocation, including path-qualified binaries such as `/usr/bin/sudo`.
 - **Case-insensitive.** `Git` and `git` are equivalent.
+- **Shell-aware.** Quotes are respected, so `echo "curl"` does not match the
+  blocked `curl` command. Shell chains, pipes, redirects, and `sh -c` wrappers
+  require approval even when one segment matches an auto-approve pattern.
 
 Verify before trusting it:
 

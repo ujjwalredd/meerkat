@@ -100,7 +100,10 @@ integrations:
 
 `commands.*` patterns are matched as **prefix on whole tokens**: `npm test`
 matches `npm test --watch` but not `npm testfoo`. Single-token patterns like
-`sudo` use word-boundary regex.
+`sudo` match the invoked binary, including path-qualified binaries such as
+`/usr/bin/sudo`. Quoted text is not treated as a command, so `echo "curl"`
+does not match a blocked `curl` command. Shell chains, pipes, redirects, and
+`sh -c` wrappers are inspected but require approval.
 
 `filesystem.*` patterns support `filepath.Match` globs (`*`, `?`) and bare
 paths (directory prefix match). Symlinks are resolved to their real paths

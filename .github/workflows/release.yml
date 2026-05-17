@@ -6,46 +6,72 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-          - os: ubuntu-latest
-            goos: linux
-            goarch: arm64
-          - os: macos-latest
-            goos: darwin
-            goarch: amd64
-          - os: macos-latest
-            goos: darwin
-            goarch: arm64
-          - os: windows-latest
-            goos: windows
-            goarch: amd64
-    runs-on: ${{ matrix.os }}
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-      - name: Build
-        shell: bash
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          VERSION: ${{ github.ref_name }}
-        run: |
-          out="meerkat-${GOOS}-${GOARCH}"
-          if [ "$GOOS" = "windows" ]; then out="${out}.exe"; fi
-          go build -trimpath \
-            -ldflags "-s -w -X main.Version=${VERSION}" \
-            -o "$out" ./cmd/meerkat
-          ls -la "$out"
-      - uses: softprops/action-gh-release@v2
+      - run: gofmt -l . | tee /tmp/fmt.out && test ! -s /tmp/fmt.out
+      - run: bash -n scripts/install.sh
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: npm --prefix npm test
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
         with:
-          files: meerkat-*
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build release binaries
+        run: make release-local
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/sbom.spdx.json
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum meerkat-* sbom.spdx.json > checksums.txt
+          cat checksums.txt
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign checksums with keyless Sigstore
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign-blob \
+            --yes \
+            --output-signature dist/checksums.txt.sig \
+            --output-certificate dist/checksums.txt.pem \
+            dist/checksums.txt
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -8,7 +8,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
-  <a href=".github/workflows/ci.yml"><img src="https://img.shields.io/badge/ci-passing-brightgreen.svg" alt="CI"></a>
+  <a href="https://github.com/ujjwalredd/meerkat/actions/workflows/ci.yml"><img src="https://github.com/ujjwalredd/meerkat/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/ujjwalredd/meerkat/actions/workflows/release.yml"><img src="https://github.com/ujjwalredd/meerkat/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <img src="https://img.shields.io/badge/go-1.22%2B-00ADD8.svg" alt="Go">
   <img src="https://img.shields.io/badge/status-v0.4-orange.svg" alt="Status">
 </p>
@@ -87,6 +88,13 @@ What is not covered:
 - Commands you run outside Meerkat or outside Claude Code hooks.
 - Subprocess behavior inside already-approved commands; use containers or
   opt-in sandbox backends for high-risk workloads.
+- Kernel exploits, malicious compilers/interpreters, keychain/browser secrets,
+  packet-level egress from tools that bypass the proxy, or actions launched
+  outside the supervised session.
+
+Short security model: [`docs/security-model.md`](docs/security-model.md).
+FAQ: [`docs/faq.md`](docs/faq.md). Release process:
+[`docs/release.md`](docs/release.md).
 
 ---
 

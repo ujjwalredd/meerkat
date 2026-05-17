@@ -47,7 +47,7 @@ release-local: ## cross-build release binaries into ./dist (no upload)
 	    [ "$$goos" = "windows" ] && [ "$$goarch" = "arm64" ] && continue; \
 	    ext=""; [ "$$goos" = "windows" ] && ext=".exe"; \
 	    echo "==> $$goos/$$goarch"; \
-	    GOOS=$$goos GOARCH=$$goarch go build -trimpath -ldflags '$(LDFLAGS)' \
+	    CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build -trimpath -ldflags '$(LDFLAGS)' \
 	      -o "dist/$(BIN)-$$goos-$$goarch$$ext" ./cmd/meerkat; \
 	  done; \
 	done

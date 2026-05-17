@@ -17,10 +17,12 @@ meerkat claude install
 
 First invocation downloads the Go binary for your platform from
 [GitHub Releases](https://github.com/ujjwalredd/meerkat/releases) and caches
-it in `~/.meerkat/bin/`. Subsequent runs exec the cached binary directly.
+it in `~/.meerkat/bin/`. It verifies release checksums when available.
+Subsequent runs exec the cached binary directly.
 
 If no matching release asset exists, falls back to `go install` when Go 1.22+
-is on PATH.
+is on PATH. Set `MEERKAT_REQUIRE_CHECKSUM=1` to require checksums and
+`MEERKAT_INSTALL_NO_GO_FALLBACK=1` to disable the Go fallback.
 
 ## Wire into Claude Code
 

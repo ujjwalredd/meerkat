@@ -18,6 +18,7 @@ What it does:
 - Resolves the latest release from
   `https://github.com/ujjwalredd/meerkat/releases/latest`.
 - Downloads the matching prebuilt binary.
+- Verifies the binary against release `checksums.txt` when available.
 - Installs to `/usr/local/bin` (if writable) or `~/.local/bin`.
 - Falls back to `go install` if no prebuilt asset matches but Go 1.22+ is on PATH.
 - Prints the next steps for Claude Code and project policy setup.
@@ -36,6 +37,8 @@ Environment overrides:
 | `INSTALL_DIR=/path/to/bin` | Custom install location |
 | `MEERKAT_REPO=owner/name` | Use a fork |
 | `MEERKAT_SETUP_CLAUDE=1` | Also run `meerkat claude install` after installing the binary |
+| `MEERKAT_REQUIRE_CHECKSUM=1` | Fail if release checksums are unavailable |
+| `MEERKAT_INSTALL_NO_GO_FALLBACK=1` | Fail instead of falling back to `go install` |
 
 Explicit one-command CLI + Claude Code setup:
 
@@ -139,7 +142,8 @@ Claude (and any MCP-aware agent) can then call `meerkat.explain`,
 
 ```bash
 meerkat version            # → meerkat 0.4.0
-meerkat doctor             # → OS, git, keep-awake backend, policy validity
+meerkat doctor             # → PATH, Claude hooks, policy, sandbox, keep-awake
+meerkat doctor --online    # → also checks GitHub release asset availability
 meerkat sandbox doctor     # → available sandbox backends, what Auto picks
 ```
 

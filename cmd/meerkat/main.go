@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,7 +85,7 @@ Usage:
               [--dry-run] -- <cmd> [args]   run command under MeerKat
   meerkat scan [--policy F] [paths...]      secret + policy scan
   meerkat status [--policy F]               show runtime status
-  meerkat doctor                            check system compatibility
+  meerkat doctor [--online]                 check system compatibility
   meerkat policy validate [--policy F]      validate meerkat.yml
   meerkat explain -- <cmd> [args]           explain decision without running
   meerkat sandbox doctor                    list available isolation backends
@@ -557,8 +558,18 @@ func cmdStatus(args []string) int {
 }
 
 func cmdDoctor(args []string) int {
+	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
+	policyPath := fs.String("policy", "meerkat.yml", "policy file")
+	online := fs.Bool("online", false, "check latest release asset availability over the network")
+	fs.Parse(args)
+
 	fmt.Println("MeerKat doctor")
 	fmt.Println("  OS:           ", runtime.GOOS, "/", runtime.GOARCH)
+	fmt.Println("  version:      ", Version)
+	if exe, err := os.Executable(); err == nil {
+		fmt.Println("  executable:   ", exe)
+	}
+	check("meerkat in PATH", hasBin("meerkat"))
 	check("git in PATH", gitguard.IsRepo() || hasBin("git"))
 	backend, ok := awake.BackendAvailable()
 	if ok {
@@ -567,10 +578,34 @@ func cmdDoctor(args []string) int {
 		fmt.Println("  [WARN]  no keep-awake backend on this platform")
 	}
 	fmt.Println("  [OK]    built-in secret scanner")
-	if _, err := config.Load("meerkat.yml"); err == nil {
-		fmt.Println("  [OK]    meerkat.yml present and valid")
+	if p, err := config.Load(*policyPath); err == nil {
+		fmt.Println("  [OK]    policy present and valid:", p.Path)
 	} else {
-		fmt.Println("  [WARN]  meerkat.yml missing or invalid (run: meerkat init)")
+		fmt.Println("  [WARN]  policy missing or invalid (run: meerkat init):", err)
+	}
+	if claudeHooksInstalled() {
+		fmt.Println("  [OK]    Claude Code /meerkat hooks installed")
+	} else {
+		fmt.Println("  [WARN]  Claude Code hooks not installed (run: meerkat claude install)")
+	}
+	if len(sandbox.List()) == 0 {
+		fmt.Println("  [WARN]  no sandbox backends registered for this platform")
+	} else {
+		for _, name := range sandbox.List() {
+			b, _ := sandbox.Get(name)
+			if b.Available() {
+				fmt.Printf("  [OK]    sandbox backend available: %s\n", name)
+			} else {
+				fmt.Printf("  [WARN]  sandbox backend unavailable: %s\n", name)
+			}
+		}
+	}
+	if *online {
+		if err := checkReleaseAssetOnline(); err != nil {
+			fmt.Println("  [WARN]  release asset check:", err)
+		} else {
+			fmt.Println("  [OK]    release asset exists for this platform")
+		}
 	}
 	return 0
 }
@@ -586,6 +621,59 @@ func check(label string, ok bool) {
 func hasBin(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
+}
+
+func claudeHooksInstalled() bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "commands", "meerkat.md")); err != nil {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil {
+		return false
+	}
+	s := string(b)
+	return strings.Contains(s, "meerkat") &&
+		strings.Contains(s, "hook pretooluse") &&
+		strings.Contains(s, "hook sessionstart") &&
+		strings.Contains(s, "hook stop")
+}
+
+func checkReleaseAssetOnline() error {
+	version := Version
+	if version == "" || version == "dev" {
+		return fmt.Errorf("no release version embedded")
+	}
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	asset := releaseAssetName(runtime.GOOS, runtime.GOARCH)
+	url := fmt.Sprintf("https://github.com/ujjwalredd/meerkat/releases/download/%s/%s", version, asset)
+	c := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest(http.MethodHead, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return fmt.Errorf("%s returned HTTP %d", url, resp.StatusCode)
+	}
+	return nil
+}
+
+func releaseAssetName(goos, goarch string) string {
+	ext := ""
+	if goos == "windows" {
+		ext = ".exe"
+	}
+	return fmt.Sprintf("meerkat-%s-%s%s", goos, goarch, ext)
 }
 
 func cmdPolicy(args []string) int {

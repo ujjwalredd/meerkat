@@ -46,3 +46,11 @@ func TestAutoApproveDoesNotOverrideHighRisk(t *testing.T) {
 		t.Errorf("high-risk auto-approve should fall back to ASK, got %s reasons=%v", d.Action, d.Reasons)
 	}
 }
+
+func TestAutoApproveDoesNotHideChainedCommand(t *testing.T) {
+	p := config.Default()
+	d, _ := Decide("npm test && git status", p)
+	if d.Action != Ask {
+		t.Errorf("chained command should require approval, got %s reasons=%v", d.Action, d.Reasons)
+	}
+}
