@@ -1,19 +1,34 @@
 # Architecture
 
 ```
-cmd/meerkat/main.go         CLI entry: init|run|scan|status|doctor|policy|explain
+cmd/meerkat/main.go              CLI entry: init|run|scan|status|doctor|policy|
+                                 explain|sandbox|mcp|version
 internal/
-  config/                   Policy file load + validate + default
-  commandpolicy/            Risk classifier (rule-based, deterministic)
-  decision/                 Combines classification + policy mode → ALLOW|ASK|BLOCK
-  filesystem/               Path resolution, symlink-safe scope checks
-  scanner/                  Built-in regex-based secret scanner
-  gitguard/                 git status / staged / branch helpers
-  networkpolicy/            Domain extraction + allow/block evaluation
-  awake/                    macOS caffeinate, Linux systemd-inhibit
-  processrunner/            exec.Command, signal forwarding, exit code
-  audit/                    JSONL audit logger
-  ui/                       Approval prompt rendering + stdin read
+  config/                        Policy file load + validate + default
+                                 (incl. v0.3 sandbox/plugins/integrations)
+  commandpolicy/                 Risk classifier (rule-based, deterministic)
+  decision/                      classification + mode → ALLOW|ASK|BLOCK
+  filesystem/                    Path resolution, symlink-safe scope checks
+  scanner/                       Built-in regex secret scanner
+  gitguard/                      git status / staged / branch helpers
+  networkpolicy/                 Domain extraction + allow/block evaluation
+  awake/                         caffeinate / systemd-inhibit
+  processrunner/                 exec + signal forwarding (unix/windows split)
+  audit/                         JSONL audit logger
+  ui/                            Approval prompt
+  sandbox/                       Backend interface + Auto selector
+    seatbelt/                    macOS sandbox-exec (functional)
+    bwrap/                       Linux bubblewrap (functional)
+    landlock/                    Linux Landlock LSM (beta stub)
+    seccomp/                     Linux seccomp-bpf (beta stub)
+    jobobject/                   Windows Job Object (always-on)
+    appcontainer/                Windows AppContainer (beta stub)
+    wsl2/                        Windows → WSL2 re-exec
+    egress/                      HTTP CONNECT + SNI-sniffing forward proxy
+  plugins/                       Exec-based plugin manager
+                                 (gitleaks, trufflehog adapters)
+  integrations/github/           Branch-protection lookup (1h cache)
+  mcp/                           JSON-RPC 2.0 over stdio MCP server
 ```
 
 ## Lifecycle of `meerkat run -- <cmd>`

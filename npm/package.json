@@ -1,0 +1,39 @@
+{
+  "name": "meerkat-cli",
+  "version": "0.3.0",
+  "description": "Meerkat — vibe coding without blind trust. Local CLI security wrapper for AI coding agents.",
+  "keywords": [
+    "security",
+    "ai-agent",
+    "claude-code",
+    "codex",
+    "aider",
+    "sandbox",
+    "policy",
+    "mcp",
+    "secrets-scanner",
+    "keep-awake"
+  ],
+  "homepage": "https://github.com/ujjwalredd/meerkat",
+  "bugs": "https://github.com/ujjwalredd/meerkat/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ujjwalredd/meerkat.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Meerkat contributors",
+  "bin": {
+    "meerkat": "bin/meerkat.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "postinstall": "node bin/meerkat.js --install-binary-only || true"
+  }
+}

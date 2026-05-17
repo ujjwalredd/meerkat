@@ -23,19 +23,39 @@ A future shell-proxy mode will intercept inner commands too.
 | Keep-awake during agent run | Yes (macOS, Linux) |
 | Audit log of agent invocation | Yes |
 | Block agent launch if policy rejects | Yes |
-| Intercept every inner shell command the agent runs | No (v0.3) |
-| Tool-call approval API for agent SDKs | No (v0.3) |
-| MCP approval server | No (v0.3) |
+| Intercept every inner shell command the agent runs | No (v0.4, shell-proxy) |
+| Tool-call approval API for agent SDKs | Partial via MCP (v0.3) |
+| MCP approval server | **Yes (v0.3)** — `meerkat mcp` |
 
-## Future (v0.3+)
+## MCP server (shipped in v0.3)
+
+```bash
+meerkat mcp --policy meerkat.yml
+```
+
+Reads line-delimited JSON-RPC 2.0 from stdin, writes responses to stdout.
+Methods:
+
+| Method | Params | Returns |
+|--------|--------|---------|
+| `meerkat.explain` | `{ "command": "git push origin main" }` | `{ "decision": "BLOCK", "risk_level": "high", "reasons": [...] }` |
+| `meerkat.scan`    | `{ "paths": ["./src"] }`              | array of `{file,line,type,redacted}` findings |
+| `meerkat.approve` | `{ "command": "..." }`                | decision + note saying "Agent must surface this to the user; meerkat never auto-approves through MCP." |
+
+Example one-shot:
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"meerkat.explain","params":{"command":"git push origin main"}}' \
+  | meerkat mcp
+```
+
+## Future (v0.4+)
 
 - **Shell proxy mode.** Set the agent's shell to a MeerKat-supervised shim
   that runs each child command through the decision engine.
-- **MCP server.** Expose `approve` / `deny` / `explain` as MCP tools so an
-  agent can request approval inline.
 - **Tool-call adapter.** For agents with structured tool calls (write_file,
   run_shell), check the call against the policy before the tool executes.
-- **VS Code / Cursor extension.** Inline approval UI.
+- **VS Code / Cursor extension.** Inline approval UI, reuses the MCP server.
 
 ## Recommended pattern
 

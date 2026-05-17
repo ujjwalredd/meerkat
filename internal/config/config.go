@@ -22,8 +22,44 @@ type Policy struct {
 	Audit   AuditCfg      `yaml:"audit"`
 	Approve ApprovalCfg   `yaml:"approval"`
 
+	// v0.3+ optional sections. Absent = MVP behavior.
+	Sandbox      SandboxCfg      `yaml:"sandbox"`
+	Plugins      PluginsCfg      `yaml:"plugins"`
+	Integrations IntegrationsCfg `yaml:"integrations"`
+
 	// Path is the file this was loaded from (not serialized).
 	Path string `yaml:"-"`
+}
+
+type SandboxCfg struct {
+	Enabled             bool      `yaml:"enabled"`
+	Backend             string    `yaml:"backend"` // auto|off|<name>
+	FailClosed          bool      `yaml:"fail_closed"`
+	AllowlistSyscalls   []string  `yaml:"allowlist_syscalls"`
+	AllowlistPathsExtra []string  `yaml:"allowlist_paths_extra"`
+	Egress              EgressCfg `yaml:"egress"`
+}
+
+type EgressCfg struct {
+	Mode      string `yaml:"mode"` // off|proxy|block
+	ProxyAddr string `yaml:"proxy_addr"`
+}
+
+type PluginsCfg struct {
+	Scanner       []string `yaml:"scanner"`
+	Classifier    []string `yaml:"classifier"`
+	AuditSink     []string `yaml:"audit_sink"`
+	AgentAdapter  []string `yaml:"agent_adapter"`
+	NetworkPolicy []string `yaml:"network_policy"`
+}
+
+type IntegrationsCfg struct {
+	GitHub GitHubCfg `yaml:"github"`
+}
+
+type GitHubCfg struct {
+	BranchProtectionAware bool   `yaml:"branch_protection_aware"`
+	TokenEnv              string `yaml:"token_env"`
 }
 
 type ProjectCfg struct {

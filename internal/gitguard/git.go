@@ -12,6 +12,13 @@ func IsRepo() bool {
 
 func CurrentBranch() string {
 	out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err == nil {
+		if b := strings.TrimSpace(string(out)); b != "" && b != "HEAD" {
+			return b
+		}
+	}
+	// Unborn HEAD (no commits yet): read symbolic ref directly.
+	out, err = exec.Command("git", "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
 		return ""
 	}

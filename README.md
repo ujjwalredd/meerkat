@@ -45,13 +45,59 @@ Core principles:
 
 ---
 
-## Quick start
+## Install
+
+Pick the path that matches your environment. Full guide:
+[`docs/install.md`](docs/install.md).
+
+**macOS / Linux / WSL / Git-Bash** — one-line install:
+
+```bash
+curl -fsSL https://cdn.jsdelivr.net/gh/ujjwalredd/meerkat@main/scripts/install.sh | bash
+```
+
+**All platforms (including native Windows PowerShell / cmd)** — npm wrapper:
+
+```bash
+# Interactive setup wizard — runs identically on every platform
+npx meerkat-cli@latest init wizard
+
+# Quick non-interactive init
+# npx meerkat-cli@latest init
+
+# Or install globally
+npm install -g meerkat-cli
+```
+
+> 💡 **Windows users:** the `curl ... | bash` form needs a POSIX shell
+> (Git-Bash, WSL, MSYS). The `npx meerkat-cli@latest init wizard` line
+> works natively in PowerShell and cmd. If you hit
+> `'bash' is not recognized`, use the npx line instead — both end up
+> running the same init flow.
+
+**Build from source:**
 
 ```bash
 git clone https://github.com/ujjwalredd/meerkat.git
 cd meerkat
-go build -o /usr/local/bin/meerkat ./cmd/meerkat
+go build -o /usr/local/bin/meerkat ./cmd/meerkat   # requires Go 1.22+
+```
 
+## MCP server (wire into Claude Code)
+
+```bash
+claude mcp add meerkat -- npx meerkat-cli@latest mcp start
+```
+
+Or, if installed natively:
+
+```bash
+claude mcp add meerkat -- meerkat mcp start
+```
+
+## Quick start
+
+```bash
 cd ~/my-project
 meerkat init                                # write strict default meerkat.yml
 meerkat run --keep-awake -- npm test        # safe + auto-approved
@@ -60,8 +106,6 @@ meerkat explain -- git push origin main     # see the decision without running
 meerkat scan                                # secret + policy scan
 meerkat doctor                              # platform diagnostics
 ```
-
-Requires Go 1.22+. Prebuilt binaries: see Releases.
 
 ---
 
@@ -85,6 +129,12 @@ Reasons:
 ```
 
 ---
+
+## Customizing auto-approval
+
+Edit `commands.auto_approve`, `require_approval`, and `block` in
+`meerkat.yml`. Full guide with matching rules, profiles, and recipes:
+[`docs/auto-approval.md`](docs/auto-approval.md).
 
 ## Policy examples
 
@@ -253,13 +303,38 @@ For high-risk agent workloads, run Meerkat **inside** a container or VM.
 | Version | Plan |
 |---------|------|
 | v0.1    | CLI, policy, decisions, keep-awake, secret scan, git guard, audit |
-| v0.2    | Better install detection, external scanners (gitleaks, trufflehog), improved Windows |
-| v0.3    | Shell-proxy mode, agent adapters, MCP approval server, IDE extension |
-| v0.4    | OS-level sandbox backends: Linux Landlock + seccomp, macOS Seatbelt, Windows AppContainer; network egress proxy |
-| v1.0    | Stable policy format, stable CLI, signed releases, plugin system, third-party security audit |
+| v0.2    | Better install detection, improved Windows, cross-platform build |
+| **v0.3** | **Sandbox backend interface; macOS Seatbelt + Linux bubblewrap + WSL2 backends; HTTP CONNECT + SNI egress proxy; plugin manager + gitleaks/trufflehog adapters; MCP JSON-RPC server; GitHub branch-protection lookup** |
+| v0.4    | Native Landlock + seccomp; full Windows AppContainer + per-PID firewall; gRPC plugin bus; semgrep classifier; VS Code extension |
+| v1.0    | Stable policy schema, signed releases (Cosign / SLSA-3), plugin signing & registry, third-party security audit |
 
-Detailed v1 design — sandbox backends, plugin interfaces, integrations:
+Detailed v1 design + per-component shipped status:
 [`docs/v1-architecture.md`](docs/v1-architecture.md).
+
+### Try v0.3 features
+
+```bash
+meerkat sandbox doctor                       # list backends, see which Auto picks
+meerkat run --sandbox=auto -- npm test       # opt-in isolation
+meerkat run --sandbox=seatbelt -- git status # macOS Seatbelt
+meerkat mcp < requests.jsonl                 # MCP JSON-RPC 2.0 over stdio
+```
+
+```yaml
+# meerkat.yml — v0.3 additions (all optional)
+sandbox:
+  enabled: true
+  backend: auto
+  fail_closed: true
+  egress:
+    mode: proxy
+plugins:
+  scanner: [gitleaks, trufflehog]
+integrations:
+  github:
+    branch_protection_aware: true
+    token_env: GITHUB_TOKEN
+```
 
 ---
 

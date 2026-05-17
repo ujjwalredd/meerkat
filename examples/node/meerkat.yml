@@ -1,132 +1,74 @@
+# Node / npm / pnpm project.
+# Generate via:  meerkat init --profile=node
 version: 1
 project:
-    name: Meerkat
-    root: .
+  name: my-node-app
+  root: .
 mode:
-    default_action: ask
-    auto_approve_safe_actions: true
-    deny_out_of_scope: true
-    dry_run: false
+  default_action: ask
+  auto_approve_safe_actions: true
+  deny_out_of_scope: true
 awake:
-    enabled: true
-    mode: while_command_running
-    max_duration_minutes: 180
+  enabled: true
+  mode: while_command_running
+  max_duration_minutes: 180
 filesystem:
-    allowed_read_paths:
-        - .
-    allowed_write_paths:
-        - ./src
-        - ./tests
-        - ./docs
-        - ./package.json
-        - ./README.md
-    blocked_paths:
-        - ./.env
-        - ./.env.*
-        - ./secrets
-        - ./.git/config
-        - ~/.ssh
-        - ~/.aws
-        - ~/.config
-        - ~/Library/Application Support
-    block_outside_project: true
-    allow_external_paths: []
+  allowed_read_paths: [.]
+  allowed_write_paths:
+    - ./src
+    - ./tests
+    - ./docs
+    - ./public
+    - ./package.json
+    - ./README.md
+  blocked_paths: [./.env, ./.env.*, ./secrets, ./.git/config, ~/.ssh, ~/.aws]
+  block_outside_project: true
 commands:
-    auto_approve:
-        - npm test
-        - npm run test
-        - npm run build
-        - npm run lint
-        - pnpm test
-        - pnpm build
-        - yarn test
-        - go test ./...
-        - cargo test
-        - pytest
-        - git diff
-        - git status
-    require_approval:
-        - npm install
-        - pnpm install
-        - yarn add
-        - pip install
-        - poetry add
-        - cargo add
-        - go get
-        - git commit
-        - git push
-        - docker build
-        - docker compose up
-    block:
-        - sudo
-        - su
-        - rm -rf /
-        - rm -rf ~
-        - chmod -R 777
-        - chown -R
-        - curl
-        - wget
-        - scp
-        - ssh
-        - nc
-        - netcat
-        - powershell Invoke-WebRequest
-        - Invoke-RestMethod
+  auto_approve:
+    - npm test
+    - npm run test
+    - npm run build
+    - npm run lint
+    - npm run dev
+    - pnpm test
+    - pnpm build
+    - yarn test
+    - node
+    - npx
+    - tsc
+    - vitest
+    - jest
+    - git status
+    - git diff
+  require_approval:
+    - npm install
+    - pnpm install
+    - yarn add
+    - npm publish
+    - git commit
+    - git push
+  block: [sudo, su, "rm -rf /", "rm -rf ~", "chmod -R 777", curl, wget, ssh, scp, nc]
 network:
-    default: block
-    allow_domains:
-        - github.com
-        - api.github.com
-        - registry.npmjs.org
-        - pypi.org
-        - files.pythonhosted.org
-    block_domains:
-        - pastebin.com
-        - webhook.site
-        - requestbin.com
-    require_approval_for_unknown_domains: true
+  default: ask
+  allow_domains: [github.com, api.github.com, registry.npmjs.org]
+  require_approval_for_unknown_domains: true
 git:
-    protected_branches:
-        - main
-        - master
-        - production
-    block_push_to_protected_branches: true
-    require_clean_tests_before_commit: false
-    require_secret_scan_before_commit: true
-    require_secret_scan_before_push: true
-    block_force_push: true
+  protected_branches: [main, master, production]
+  block_push_to_protected_branches: true
+  require_secret_scan_before_commit: true
+  require_secret_scan_before_push: true
+  block_force_push: true
 secrets:
-    enabled: true
-    scan_before_write: false
-    scan_before_commit: true
-    scan_before_push: true
-    scan_patterns:
-        - aws_access_key
-        - private_key
-        - github_token
-        - openai_api_key
-        - anthropic_api_key
-        - database_url
-        - jwt
-        - generic_api_key
-        - slack_token
-        - stripe_key
-    ignore_paths:
-        - ./node_modules
-        - ./.git
-        - ./dist
-        - ./build
-        - ./vendor
-    max_file_bytes: 1048576
+  enabled: true
+  scan_before_commit: true
+  scan_before_push: true
+  ignore_paths: [./node_modules, ./.git, ./dist, ./build, ./.next, ./coverage]
+  max_file_bytes: 1048576
 audit:
-    enabled: true
-    log_dir: ./.meerkat/logs
-    format: jsonl
-    include_command_output: false
-    redact_secrets: true
+  enabled: true
+  log_dir: ./.meerkat/logs
+  format: jsonl
+  redact_secrets: true
 approval:
-    prompt_style: compact
-    timeout_seconds: 120
-    default_on_timeout: deny
-    allow_session_approval: true
-    allow_one_time_approval: true
+  timeout_seconds: 120
+  default_on_timeout: deny

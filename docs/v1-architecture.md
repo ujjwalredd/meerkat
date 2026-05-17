@@ -1,7 +1,33 @@
 # Meerkat v1 Architecture — Stronger Isolation, Plugins, Integrations
 
-> Status: design document. Targets v0.3 → v1.0. Default experience stays simple;
-> advanced isolation is opt-in and only after each backend is stable.
+> Status: design + shipped-implementation reference. Targets v0.3 → v1.0.
+> Default experience stays simple; advanced isolation is opt-in and only
+> after each backend is stable.
+
+## Shipped in v0.3 (this release)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Sandbox backend interface + Auto selector | ✅ shipped | `internal/sandbox/backend.go` |
+| macOS Seatbelt backend | ✅ shipped | functional via `sandbox-exec`; allow-default + deny secret paths (see §4.1) |
+| Linux bubblewrap backend | ✅ shipped | requires `bwrap`; pairs with `--unshare-net` |
+| Windows Job Object marker | ✅ shipped | always-on on Windows |
+| WSL2 re-exec backend | ✅ shipped | for Windows users wanting Linux backend |
+| Landlock backend | ⏸ beta stub | reports unavailable; native syscall path gated by build tag |
+| seccomp backend | ⏸ beta stub | same |
+| Windows AppContainer | ⏸ beta stub | same |
+| Egress proxy (HTTP CONNECT + SNI sniff) | ✅ shipped | `internal/sandbox/egress`, defeats domain fronting |
+| Plugin manager (exec-based) | ✅ shipped | `internal/plugins` |
+| gitleaks plugin adapter | ✅ shipped | activates if `gitleaks` in PATH |
+| trufflehog plugin adapter | ✅ shipped | activates if `trufflehog` in PATH |
+| GitHub branch-protection lookup | ✅ shipped | `internal/integrations/github`, 1h cache |
+| MCP server (JSON-RPC 2.0 over stdio) | ✅ shipped | `meerkat mcp`; methods: `meerkat.explain`, `.scan`, `.approve` |
+| `meerkat sandbox doctor` / `profile` | ✅ shipped | |
+| `meerkat run --sandbox=…` | ✅ shipped | |
+
+**Deferred to v0.4+:** native Landlock + seccomp syscall paths, full Windows
+AppContainer + per-PID firewall, gRPC plugin bus, semgrep classifier
+plugin, VS Code extension, signed releases / SLSA provenance.
 
 ---
 
@@ -33,11 +59,11 @@
 ┌──────────────────────────────▼──────────────────────────────────────┐
 │  Enforcement Layer                                                  │
 │  ┌────────────────────────┐  ┌─────────────────────────────────┐    │
-│  │ Process Runner          │  │ Sandbox Backend (opt-in)       │    │
-│  │ (always present)        │  │  - macos.seatbelt              │    │
-│  │ - exec.Command          │  │  - linux.landlock              │    │
-│  │ - signal forwarding     │  │  - linux.seccomp               │    │
-│  │ - pgroup cleanup        │  │  - linux.bubblewrap            │    │
+│  │ Process Runner         │  │ Sandbox Backend (opt-in)        │    │
+│  │ (always present)       │  │  - macos.seatbelt               │    │
+│  │ - exec.Command         │  │  - linux.landlock               │    │
+│  │ - signal forwarding    │  │  - linux.seccomp                │    │
+│  │ - pgroup cleanup       │  │  - linux.bubblewrap             │    │
 │  └────────────────────────┘  │  - linux.egress_proxy           │    │
 │                              │  - windows.appcontainer         │    │
 │                              │  - windows.job_object           │    │

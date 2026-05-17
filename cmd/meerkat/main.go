@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,12 +16,24 @@ import (
 	"github.com/ujjwalredd/meerkat/internal/config"
 	"github.com/ujjwalredd/meerkat/internal/decision"
 	"github.com/ujjwalredd/meerkat/internal/gitguard"
+	"github.com/ujjwalredd/meerkat/internal/mcp"
 	"github.com/ujjwalredd/meerkat/internal/processrunner"
+	"github.com/ujjwalredd/meerkat/internal/sandbox"
+	"github.com/ujjwalredd/meerkat/internal/sandbox/egress"
 	"github.com/ujjwalredd/meerkat/internal/scanner"
 	"github.com/ujjwalredd/meerkat/internal/ui"
+
+	// register sandbox backends (build-tagged per OS)
+	_ "github.com/ujjwalredd/meerkat/internal/sandbox/appcontainer"
+	_ "github.com/ujjwalredd/meerkat/internal/sandbox/bwrap"
+	_ "github.com/ujjwalredd/meerkat/internal/sandbox/jobobject"
+	_ "github.com/ujjwalredd/meerkat/internal/sandbox/landlock"
+	_ "github.com/ujjwalredd/meerkat/internal/sandbox/seatbelt"
+	_ "github.com/ujjwalredd/meerkat/internal/sandbox/seccomp"
+	_ "github.com/ujjwalredd/meerkat/internal/sandbox/wsl2"
 )
 
-const Version = "0.1.0"
+const Version = "0.3.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -42,6 +55,10 @@ func main() {
 		os.Exit(cmdPolicy(os.Args[2:]))
 	case "explain":
 		os.Exit(cmdExplain(os.Args[2:]))
+	case "sandbox":
+		os.Exit(cmdSandbox(os.Args[2:]))
+	case "mcp":
+		os.Exit(cmdMCP(os.Args[2:]))
 	case "version", "--version", "-v":
 		fmt.Println("meerkat", Version)
 	case "help", "--help", "-h":
@@ -57,7 +74,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `MeerKat - vibe coding without blind trust.
 
 Usage:
-  meerkat init                              create starter meerkat.yml
+  meerkat init [wizard] [--profile P]       create starter meerkat.yml
+                                            (profiles: basic|strict|agent|node|python)
   meerkat run [--policy F] [--keep-awake]
               [--dry-run] -- <cmd> [args]   run command under MeerKat
   meerkat scan [--policy F] [paths...]      secret + policy scan
@@ -65,6 +83,9 @@ Usage:
   meerkat doctor                            check system compatibility
   meerkat policy validate [--policy F]      validate meerkat.yml
   meerkat explain -- <cmd> [args]           explain decision without running
+  meerkat sandbox doctor                    list available isolation backends
+  meerkat sandbox profile [--policy F]      show generated sandbox profile
+  meerkat mcp [start] [--policy F]          run JSON-RPC MCP server on stdio
   meerkat version                           print version`)
 }
 
@@ -78,22 +99,98 @@ func loadPolicy(path string) *config.Policy {
 }
 
 func cmdInit(args []string) int {
+	// Accept `meerkat init wizard` (interactive) and `meerkat init` (defaults).
+	wizard := false
+	if len(args) > 0 && args[0] == "wizard" {
+		wizard = true
+		args = args[1:]
+	}
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	out := fs.String("o", "meerkat.yml", "output file")
 	force := fs.Bool("force", false, "overwrite existing file")
+	profile := fs.String("profile", "basic", "starter profile: basic|strict|agent|node|python")
 	fs.Parse(args)
 	if _, err := os.Stat(*out); err == nil && !*force {
 		fmt.Fprintf(os.Stderr, "%s already exists (use --force to overwrite)\n", *out)
 		return 1
 	}
 	p := config.Default()
+	if wizard {
+		runWizard(p)
+	} else {
+		applyProfile(p, *profile)
+	}
 	if err := config.Save(p, *out); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Printf("Wrote default policy to %s\n", *out)
-	fmt.Println("Review it, then run:  meerkat run -- <your command>")
+	fmt.Printf("Wrote %s policy to %s\n", *profile, *out)
+	fmt.Println("Next:")
+	fmt.Println("  meerkat run --keep-awake -- <your command>")
+	fmt.Println("  meerkat explain -- git push origin main")
+	fmt.Println("  meerkat doctor")
 	return 0
+}
+
+// applyProfile tunes the default policy for a starter profile.
+func applyProfile(p *config.Policy, name string) {
+	switch name {
+	case "strict":
+		p.Mode.DefaultAction = "block"
+		p.Mode.AutoApproveSafe = false
+		p.Cmds.AutoApprove = nil
+	case "agent":
+		addUnique(&p.Cmds.AutoApprove, "claude", "codex", "aider", "goose")
+	case "node":
+		addUnique(&p.Cmds.AutoApprove, "node", "npx", "tsc", "vitest", "jest")
+	case "python":
+		addUnique(&p.Cmds.AutoApprove, "python", "python3", "pytest -q", "ruff", "mypy")
+	case "basic":
+	}
+}
+
+func addUnique(list *[]string, items ...string) {
+	seen := map[string]bool{}
+	for _, e := range *list {
+		seen[e] = true
+	}
+	for _, it := range items {
+		if !seen[it] {
+			*list = append(*list, it)
+			seen[it] = true
+		}
+	}
+}
+
+// runWizard asks a few questions on stdin to tailor the policy.
+func runWizard(p *config.Policy) {
+	in := bufio.NewReader(os.Stdin)
+	ask := func(prompt, def string) string {
+		fmt.Printf("%s [%s]: ", prompt, def)
+		line, _ := in.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return def
+		}
+		return line
+	}
+	fmt.Println("Meerkat setup wizard")
+	fmt.Println("--------------------")
+	p.Project.Name = ask("Project name", p.Project.Name)
+	prof := ask("Profile (basic|strict|agent|node|python)", "basic")
+	applyProfile(p, prof)
+	agents := ask("Auto-approve AI agents? (claude,codex,aider,goose) [Y/n]", "Y")
+	if strings.HasPrefix(strings.ToLower(agents), "y") {
+		addUnique(&p.Cmds.AutoApprove, "claude", "codex", "aider", "goose")
+	}
+	if strings.HasPrefix(strings.ToLower(ask("Enable sandbox? [y/N]", "N")), "y") {
+		p.Sandbox.Enabled = true
+		p.Sandbox.Backend = "auto"
+		p.Sandbox.FailClosed = false
+	}
+	if strings.HasPrefix(strings.ToLower(ask("Enable egress proxy? [y/N]", "N")), "y") {
+		p.Sandbox.Egress.Mode = "proxy"
+	}
 }
 
 // argsAfterDoubleDash extracts argv after `--`.
@@ -112,6 +209,7 @@ func cmdRun(args []string) int {
 	policyPath := fs.String("policy", "meerkat.yml", "policy file")
 	keepAwake := fs.Bool("keep-awake", false, "force keep-awake on")
 	dryRun := fs.Bool("dry-run", false, "evaluate decision, do not execute")
+	sandboxFlag := fs.String("sandbox", "", "sandbox backend: auto|off|seatbelt|bwrap|landlock|seccomp|jobobject|appcontainer|wsl2")
 	fs.Parse(before)
 	if len(after) == 0 {
 		fmt.Fprintln(os.Stderr, "missing command after --")
@@ -212,8 +310,67 @@ func cmdRun(args []string) int {
 		}
 	}()
 
+	// Resolve sandbox backend: CLI flag overrides policy.
+	sbName := *sandboxFlag
+	if sbName == "" {
+		if p.Sandbox.Enabled {
+			sbName = p.Sandbox.Backend
+			if sbName == "" {
+				sbName = "auto"
+			}
+		} else {
+			sbName = "off"
+		}
+	}
+	sb, sbErr := sandbox.Select(sbName, p.Sandbox.FailClosed)
+	if sbErr != nil {
+		fmt.Fprintln(os.Stderr, "[meerkat] sandbox:", sbErr)
+		log.Log(audit.Event{Type: "policy_violation", Reasons: []string{sbErr.Error()}})
+		return 4
+	}
+	wrapped := after
+	var sbCleanup sandbox.Cleanup
+	if sb != nil {
+		w, cl, err := sb.Wrap(after, p)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "[meerkat] sandbox wrap:", err)
+			log.Log(audit.Event{Type: "policy_violation", Reasons: []string{err.Error()}})
+			return 4
+		}
+		wrapped = w
+		sbCleanup = cl
+		log.Log(audit.Event{Type: "sandbox_started",
+			Extra: map[string]any{"backend": sb.Name(), "wrapped_argv0": w[0]}})
+		fmt.Fprintf(os.Stderr, "[meerkat] sandbox: %s\n", sb.Name())
+	}
+	defer func() {
+		if sbCleanup != nil {
+			sbCleanup()
+		}
+	}()
+
+	// Optional egress proxy.
+	var prox *egress.Proxy
+	if p.Sandbox.Egress.Mode == "proxy" {
+		pr, err := egress.Start(&p.Net, log)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "[meerkat] egress proxy:", err)
+		} else {
+			prox = pr
+			os.Setenv("HTTP_PROXY", "http://"+pr.Addr())
+			os.Setenv("HTTPS_PROXY", "http://"+pr.Addr())
+			fmt.Fprintf(os.Stderr, "[meerkat] egress proxy: %s\n", pr.Addr())
+		}
+	}
+	defer func() {
+		if prox != nil {
+			prox.Close()
+		}
+	}()
+
 	log.Log(audit.Event{Type: "command_started", Command: cmdLine})
-	res := processrunner.Run(after)
+	fmt.Fprintf(os.Stderr, "[meerkat] running: %s\n\n", cmdLine)
+	res := processrunner.Run(wrapped)
 	log.Log(audit.Event{Type: "command_finished", Command: cmdLine,
 		ExitCode: res.ExitCode, DurationMs: res.DurationMs})
 
@@ -461,6 +618,80 @@ func cmdExplain(args []string) int {
 		return 4
 	case decision.Ask:
 		return 6
+	}
+	return 0
+}
+
+func cmdSandbox(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: meerkat sandbox doctor|profile [--policy F] [--backend NAME]")
+		return 2
+	}
+	switch args[0] {
+	case "doctor":
+		fmt.Println("Sandbox backends")
+		fmt.Println("  OS:", runtime.GOOS)
+		for _, name := range sandbox.List() {
+			b, _ := sandbox.Get(name)
+			status := "unavailable"
+			if b.Available() {
+				status = "available"
+			}
+			fmt.Printf("  %-13s %s\n", name, status)
+		}
+		auto := sandbox.Auto()
+		if auto != nil {
+			fmt.Println("  auto picks:", auto.Name())
+		} else {
+			fmt.Println("  auto picks: (none available)")
+		}
+		return 0
+	case "profile":
+		fs := flag.NewFlagSet("profile", flag.ExitOnError)
+		policyPath := fs.String("policy", "meerkat.yml", "policy file")
+		backend := fs.String("backend", "auto", "backend name")
+		fs.Parse(args[1:])
+		p := loadPolicy(*policyPath)
+		b, err := sandbox.Select(*backend, false)
+		if err != nil || b == nil {
+			fmt.Fprintln(os.Stderr, "no backend available:", err)
+			return 1
+		}
+		// Show the wrapped argv for a representative command.
+		w, cl, err := b.Wrap([]string{"echo", "hello"}, p)
+		if cl != nil {
+			defer cl()
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println("backend:", b.Name())
+		fmt.Println("wrapped argv:")
+		for _, a := range w {
+			fmt.Println("  ", a)
+		}
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "unknown sandbox subcommand:", args[0])
+	return 2
+}
+
+func cmdMCP(args []string) int {
+	// Accept canonical `meerkat mcp start` and bare `meerkat mcp`.
+	if len(args) > 0 && args[0] == "start" {
+		args = args[1:]
+	}
+	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
+	policyPath := fs.String("policy", "meerkat.yml", "policy file")
+	fs.Parse(args)
+	p, err := config.Load(*policyPath)
+	if err != nil {
+		p = config.Default()
+	}
+	if err := mcp.Run(p); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
 	}
 	return 0
 }

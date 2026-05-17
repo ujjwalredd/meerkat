@@ -69,6 +69,31 @@ approval:
   default_on_timeout: deny              # deny | allow
   allow_session_approval: true
   allow_one_time_approval: true
+
+# v0.3+ optional sections. Omit any to keep MVP behavior.
+
+sandbox:
+  enabled: false                        # opt-in
+  backend: auto                         # auto|off|seatbelt|bwrap|landlock|
+                                        # seccomp|jobobject|appcontainer|wsl2
+  fail_closed: true                     # BLOCK run if backend unavailable
+  allowlist_syscalls: []                # seccomp inline list (v0.4)
+  allowlist_paths_extra: []             # extra granted paths
+  egress:
+    mode: off                           # off | proxy | block
+    proxy_addr: "127.0.0.1:8443"        # ignored when mode=off
+
+plugins:
+  scanner:    [gitleaks, trufflehog]    # auto-activate if on PATH
+  classifier: []
+  audit_sink: []
+  agent_adapter: []
+  network_policy: []
+
+integrations:
+  github:
+    branch_protection_aware: true       # query api.github.com (1h cache)
+    token_env: GITHUB_TOKEN             # read-only token env var
 ```
 
 ## Pattern matching
