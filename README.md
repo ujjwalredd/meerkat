@@ -258,6 +258,9 @@ For high-risk agent workloads, run Meerkat **inside** a container or VM.
 | v0.4    | OS-level sandbox backends: Linux Landlock + seccomp, macOS Seatbelt, Windows AppContainer; network egress proxy |
 | v1.0    | Stable policy format, stable CLI, signed releases, plugin system, third-party security audit |
 
+Detailed v1 design — sandbox backends, plugin interfaces, integrations:
+[`docs/v1-architecture.md`](docs/v1-architecture.md).
+
 ---
 
 ## Contributing

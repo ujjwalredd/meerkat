@@ -39,5 +39,5 @@ jobs:
         with:
           go-version: '1.22'
       - run: go build -o meerkat ./cmd/meerkat
-      - run: ./meerkat init --force
+      - run: ./meerkat policy validate
       - run: ./meerkat scan .
