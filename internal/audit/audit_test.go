@@ -17,7 +17,8 @@ func TestLoggerJSONL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Log(Event{Type: "run_started", Command: "npm test"})
+	secret := "AKIA" + "ABCDEFGHIJKLMNOP"
+	l.Log(Event{Type: "run_started", Command: "echo " + secret})
 	l.Log(Event{Type: "run_finished", ExitCode: 0})
 	l.Close()
 	f, err := os.Open(l.Path())

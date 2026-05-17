@@ -44,3 +44,22 @@ func TestInvalidVersion(t *testing.T) {
 		t.Fatal("want version error")
 	}
 }
+
+func TestInvalidDefaultActionWithOutsideProjectDisabled(t *testing.T) {
+	p := Default()
+	p.FS.BlockOutsideProject = false
+	p.Mode.DefaultAction = "maybe"
+	if err := p.Validate(); err == nil {
+		t.Fatal("want mode.default_action error")
+	}
+}
+
+func TestAllowedWritePathStartingWithDotsInsideRoot(t *testing.T) {
+	d := t.TempDir()
+	p := Default()
+	p.Project.Root = d
+	p.FS.AllowedWritePaths = []string{"./..cache"}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("path is inside root and should validate: %v", err)
+	}
+}

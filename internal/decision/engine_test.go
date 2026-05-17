@@ -37,3 +37,12 @@ func TestDefaultBlockUnknown(t *testing.T) {
 		t.Errorf("unknown w/ default=block want BLOCK got %s", d.Action)
 	}
 }
+
+func TestAutoApproveDoesNotOverrideHighRisk(t *testing.T) {
+	p := config.Default()
+	p.Cmds.AutoApprove = append([]string{"git push"}, p.Cmds.AutoApprove...)
+	d, _ := Decide("git push origin feature", p)
+	if d.Action != Ask {
+		t.Errorf("high-risk auto-approve should fall back to ASK, got %s reasons=%v", d.Action, d.Reasons)
+	}
+}

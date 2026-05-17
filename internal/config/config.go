@@ -258,6 +258,11 @@ func (p *Policy) Validate() error {
 	if err != nil {
 		return fmt.Errorf("policy error: invalid project.root: %v", err)
 	}
+	switch p.Mode.DefaultAction {
+	case "", "ask", "allow", "block":
+	default:
+		return fmt.Errorf("policy error: mode.default_action must be ask|allow|block")
+	}
 	if !p.FS.BlockOutsideProject {
 		return nil
 	}
@@ -271,7 +276,7 @@ func (p *Policy) Validate() error {
 			return fmt.Errorf("policy error: filesystem.allowed_write_paths[%d] invalid: %v", i, err)
 		}
 		rel, err := filepath.Rel(absRoot, ap)
-		if err != nil || strings.HasPrefix(rel, "..") {
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			if !isExplicitlyAllowed(ap, p.FS.AllowExternalPaths) {
 				return fmt.Errorf(`policy error in %s:
 
@@ -282,11 +287,6 @@ By default, MeerKat blocks paths outside the project root.
 To allow this intentionally, set filesystem.allow_external_paths with explicit paths.`, p.Path, i, w)
 			}
 		}
-	}
-	switch p.Mode.DefaultAction {
-	case "", "ask", "allow", "block":
-	default:
-		return fmt.Errorf("policy error: mode.default_action must be ask|allow|block")
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/ujjwalredd/meerkat/internal/awake"
 	"github.com/ujjwalredd/meerkat/internal/config"
 	"github.com/ujjwalredd/meerkat/internal/decision"
+	"github.com/ujjwalredd/meerkat/internal/filesystem"
 	"github.com/ujjwalredd/meerkat/internal/gitguard"
 	"github.com/ujjwalredd/meerkat/internal/hook"
 	"github.com/ujjwalredd/meerkat/internal/mcp"
@@ -31,7 +33,7 @@ import (
 	_ "github.com/ujjwalredd/meerkat/internal/sandbox/wsl2"
 )
 
-const Version = "0.3.0"
+var Version = "0.3.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -390,6 +392,9 @@ func cmdRun(args []string) int {
 					fmt.Fprintln(os.Stderr, "  - "+f)
 				}
 				log.Log(audit.Event{Type: "policy_violation", Reasons: append([]string{"out-of-scope writes"}, oos...)})
+				if p.Mode.DenyOutOfScope {
+					res.ExitCode = 4
+				}
 			}
 		}
 	}
@@ -413,7 +418,7 @@ func preScan(p *config.Policy, log *audit.Logger, op string) bool {
 	if len(files) == 0 {
 		files = []string{"."}
 	}
-	findings, _ := scanner.Scan(files, &p.Secrets, ".")
+	findings, _ := scanner.Scan(files, &p.Secrets, p.Project.Root)
 	if len(findings) == 0 {
 		log.Log(audit.Event{Type: "secret_scan_started", SecretScanResult: "clean"})
 		return false
@@ -432,21 +437,31 @@ func preScan(p *config.Policy, log *audit.Logger, op string) bool {
 }
 
 func outOfScope(files []string, p *config.Policy) []string {
-	root, _ := filepath.Abs(p.Project.Root)
-	if root == "" {
-		root, _ = os.Getwd()
+	root, _ := filesystem.Resolve(p.Project.Root)
+	if root == "" || p.Project.Root == "" {
+		root, _ = filesystem.Resolve(".")
+	}
+	base := root
+	if repoRoot := gitguard.RepoRoot(); repoRoot != "" {
+		if resolved, err := filesystem.Resolve(repoRoot); err == nil {
+			base = resolved
+		}
 	}
 	var oos []string
 	for _, f := range files {
-		abs, _ := filepath.Abs(f)
+		target := filesystem.ExpandTilde(f)
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(base, target)
+		}
+		abs, _ := filesystem.Resolve(target)
 		ok := false
 		for _, w := range p.FS.AllowedWritePaths {
-			we := w
+			we := filesystem.ExpandTilde(w)
 			if !filepath.IsAbs(we) {
 				we = filepath.Join(root, we)
 			}
-			we, _ = filepath.Abs(we)
-			if abs == we || strings.HasPrefix(abs, we+string(filepath.Separator)) {
+			we, _ = filesystem.Resolve(we)
+			if filesystem.Inside(we, abs) {
 				ok = true
 				break
 			}
@@ -475,7 +490,7 @@ func cmdScan(args []string) int {
 	if len(paths) == 0 {
 		paths = []string{"."}
 	}
-	findings, err := scanner.Scan(paths, &p.Secrets, ".")
+	findings, err := scanner.Scan(paths, &p.Secrets, p.Project.Root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -569,11 +584,7 @@ func check(label string, ok bool) {
 }
 
 func hasBin(name string) bool {
-	_, err := os.Stat("/usr/bin/" + name)
-	if err == nil {
-		return true
-	}
-	_, err = os.Stat("/usr/local/bin/" + name)
+	_, err := exec.LookPath(name)
 	return err == nil
 }
 
@@ -806,30 +817,24 @@ Task: $ARGUMENTS
 	cmdStr := func(event string) string {
 		return fmt.Sprintf("%q hook %s", binPath, event)
 	}
-	hooks["PreToolUse"] = []any{map[string]any{
+	installClaudeHook(hooks, claudeHookSpec{
+		EventKey: "PreToolUse",
+		HookArg:  "pretooluse",
 		// Match Bash AND file-mutating tools so Meerkat governs both
 		// shell commands and edits to disk.
-		"matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read",
-		"hooks": []any{map[string]any{
-			"type":    "command",
-			"command": cmdStr("pretooluse"),
-			"timeout": 10,
-		}},
-	}}
-	hooks["SessionStart"] = []any{map[string]any{
-		"hooks": []any{map[string]any{
-			"type":    "command",
-			"command": cmdStr("sessionstart"),
-			"timeout": 10,
-		}},
-	}}
-	hooks["Stop"] = []any{map[string]any{
-		"hooks": []any{map[string]any{
-			"type":    "command",
-			"command": cmdStr("stop"),
-			"timeout": 10,
-		}},
-	}}
+		Matcher: "Bash|Write|Edit|MultiEdit|NotebookEdit|Read",
+		Command: cmdStr("pretooluse"),
+	})
+	installClaudeHook(hooks, claudeHookSpec{
+		EventKey: "SessionStart",
+		HookArg:  "sessionstart",
+		Command:  cmdStr("sessionstart"),
+	})
+	installClaudeHook(hooks, claudeHookSpec{
+		EventKey: "Stop",
+		HookArg:  "stop",
+		Command:  cmdStr("stop"),
+	})
 	settings["hooks"] = hooks
 	out, _ := json.MarshalIndent(settings, "", "  ")
 	if err := os.WriteFile(settingsPath, out, 0o644); err != nil {
@@ -856,9 +861,9 @@ func claudeUninstall() int {
 		var s map[string]any
 		if json.Unmarshal(b, &s) == nil {
 			if hooks, ok := s["hooks"].(map[string]any); ok {
-				delete(hooks, "PreToolUse")
-				delete(hooks, "SessionStart")
-				delete(hooks, "Stop")
+				removeClaudeHook(hooks, "PreToolUse", "pretooluse")
+				removeClaudeHook(hooks, "SessionStart", "sessionstart")
+				removeClaudeHook(hooks, "Stop", "stop")
 				if len(hooks) == 0 {
 					delete(s, "hooks")
 				} else {
@@ -871,4 +876,83 @@ func claudeUninstall() int {
 	}
 	fmt.Println("removed /meerkat slash command + Meerkat hooks from ~/.claude")
 	return 0
+}
+
+type claudeHookSpec struct {
+	EventKey string
+	HookArg  string
+	Matcher  string
+	Command  string
+}
+
+func installClaudeHook(hooks map[string]any, spec claudeHookSpec) {
+	entry := map[string]any{
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": spec.Command,
+			"timeout": 10,
+		}},
+	}
+	if spec.Matcher != "" {
+		entry["matcher"] = spec.Matcher
+	}
+	existing := hookEntries(hooks[spec.EventKey])
+	hooks[spec.EventKey] = append(removeMeerkatHookEntries(existing, spec.HookArg), entry)
+}
+
+func removeClaudeHook(hooks map[string]any, eventKey, hookArg string) {
+	filtered := removeMeerkatHookEntries(hookEntries(hooks[eventKey]), hookArg)
+	if len(filtered) == 0 {
+		delete(hooks, eventKey)
+		return
+	}
+	hooks[eventKey] = filtered
+}
+
+func hookEntries(v any) []any {
+	if v == nil {
+		return nil
+	}
+	if entries, ok := v.([]any); ok {
+		return entries
+	}
+	return []any{v}
+}
+
+func removeMeerkatHookEntries(entries []any, hookArg string) []any {
+	filtered := make([]any, 0, len(entries))
+	for _, entry := range entries {
+		if !isMeerkatHookEntry(entry, hookArg) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func isMeerkatHookEntry(entry any, hookArg string) bool {
+	m, ok := entry.(map[string]any)
+	if !ok {
+		return false
+	}
+	hooks, ok := m["hooks"].([]any)
+	if !ok {
+		return false
+	}
+	for _, h := range hooks {
+		hm, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		cmd, _ := hm["command"].(string)
+		if isMeerkatHookCommand(cmd, hookArg) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMeerkatHookCommand(cmd, hookArg string) bool {
+	cmd = strings.ToLower(cmd)
+	hookArg = strings.ToLower(hookArg)
+	return strings.Contains(cmd, "meerkat") && strings.Contains(cmd, " hook "+hookArg)
 }

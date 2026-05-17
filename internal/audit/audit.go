@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ujjwalredd/meerkat/internal/config"
+	"github.com/ujjwalredd/meerkat/internal/scanner"
 )
 
 type Event struct {
@@ -67,6 +68,9 @@ func (l *Logger) Log(e Event) {
 	if e.Timestamp == "" {
 		e.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
 	}
+	if l.cfg != nil && l.cfg.RedactSecrets {
+		e = redactEvent(e)
+	}
 	b, err := json.Marshal(e)
 	if err != nil {
 		return
@@ -80,4 +84,59 @@ func (l *Logger) Close() error {
 		return nil
 	}
 	return l.f.Close()
+}
+
+func redactEvent(e Event) Event {
+	e.Command = scanner.RedactText(e.Command)
+	e.WorkingDir = scanner.RedactText(e.WorkingDir)
+	e.Decision = scanner.RedactText(e.Decision)
+	e.RiskLevel = scanner.RedactText(e.RiskLevel)
+	e.Reasons = redactStringSlice(e.Reasons)
+	e.PolicyFile = scanner.RedactText(e.PolicyFile)
+	e.GitBranch = scanner.RedactText(e.GitBranch)
+	e.SecretScanResult = scanner.RedactText(e.SecretScanResult)
+	e.KeepAwakeStatus = scanner.RedactText(e.KeepAwakeStatus)
+	e.Extra = redactMap(e.Extra)
+	return e
+}
+
+func redactStringSlice(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = scanner.RedactText(s)
+	}
+	return out
+}
+
+func redactMap(in map[string]interface{}) map[string]interface{} {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = redactAny(v)
+	}
+	return out
+}
+
+func redactAny(v interface{}) interface{} {
+	switch x := v.(type) {
+	case string:
+		return scanner.RedactText(x)
+	case []string:
+		return redactStringSlice(x)
+	case []interface{}:
+		out := make([]interface{}, len(x))
+		for i, v := range x {
+			out[i] = redactAny(v)
+		}
+		return out
+	case map[string]interface{}:
+		return redactMap(x)
+	default:
+		return v
+	}
 }

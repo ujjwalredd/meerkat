@@ -38,8 +38,17 @@ var rules = []rule{
 
 // Scan walks files (or paths) and returns secret findings.
 func Scan(paths []string, cfg *config.SecretsCfg, projectRoot string) ([]Finding, error) {
+	if cfg != nil && !cfg.Enabled {
+		return nil, nil
+	}
 	var out []Finding
-	max := cfg.MaxFileBytes
+	selected := selectedRules(cfg)
+	var ignorePaths []string
+	max := int64(1024 * 1024)
+	if cfg != nil {
+		max = cfg.MaxFileBytes
+		ignorePaths = cfg.IgnorePaths
+	}
 	if max <= 0 {
 		max = 1024 * 1024
 	}
@@ -53,21 +62,21 @@ func Scan(paths []string, cfg *config.SecretsCfg, projectRoot string) ([]Finding
 				if err != nil || info.IsDir() {
 					return nil
 				}
-				if ignored(path, cfg.IgnorePaths, projectRoot) {
+				if ignored(path, ignorePaths, projectRoot) {
 					return nil
 				}
 				if info.Size() > max {
 					return nil
 				}
-				out = append(out, scanFile(path)...)
+				out = append(out, scanFile(path, selected)...)
 				return nil
 			})
 			continue
 		}
-		if ignored(p, cfg.IgnorePaths, projectRoot) || fi.Size() > max {
+		if ignored(p, ignorePaths, projectRoot) || fi.Size() > max {
 			continue
 		}
-		out = append(out, scanFile(p)...)
+		out = append(out, scanFile(p, selected)...)
 	}
 	return out, nil
 }
@@ -76,7 +85,24 @@ func ignored(path string, patterns []string, root string) bool {
 	return filesystem.MatchAny(path, patterns, root)
 }
 
-func scanFile(path string) []Finding {
+func selectedRules(cfg *config.SecretsCfg) []rule {
+	if cfg == nil || len(cfg.ScanPatterns) == 0 {
+		return rules
+	}
+	enabled := map[string]bool{}
+	for _, name := range cfg.ScanPatterns {
+		enabled[name] = true
+	}
+	out := make([]rule, 0, len(rules))
+	for _, r := range rules {
+		if enabled[r.name] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func scanFile(path string, selected []rule) []Finding {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
@@ -92,7 +118,7 @@ func scanFile(path string) []Finding {
 		if isBinary(line) {
 			return nil
 		}
-		for _, r := range rules {
+		for _, r := range selected {
 			if m := r.re.FindString(line); m != "" {
 				out = append(out, Finding{File: path, Line: lineNo, Type: r.name, Redact: Redact(m)})
 			}
@@ -116,4 +142,12 @@ func Redact(s string) string {
 		return strings.Repeat("*", len(s))
 	}
 	return s[:3] + strings.Repeat("*", len(s)-5) + s[len(s)-2:]
+}
+
+// RedactText masks any built-in secret pattern found in free-form text.
+func RedactText(s string) string {
+	for _, r := range rules {
+		s = r.re.ReplaceAllStringFunc(s, Redact)
+	}
+	return s
 }

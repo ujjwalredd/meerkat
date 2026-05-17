@@ -54,12 +54,12 @@ func (Backend) Wrap(argv []string, p *config.Policy) ([]string, sandbox.Cleanup,
 		}
 		args = append(args, "--ro-bind-try", "/dev/null", ep)
 	}
-	// Network: unshare unless explicitly allowed and no proxy in use.
-	if p.Net.Default == "block" {
-		args = append(args, "--unshare-net")
-	} else if p.Sandbox.Egress.Mode == "proxy" {
+	// Network: block direct egress unless policy explicitly allows it. When
+	// the proxy is enabled, keep network available so proxy-aware tools can
+	// connect to it.
+	if p.Sandbox.Egress.Mode == "proxy" {
 		// keep net; the egress proxy enforces policy via HTTP(S)_PROXY env.
-	} else {
+	} else if p.Net.Default != "allow" {
 		args = append(args, "--unshare-net")
 	}
 	args = append(args, "--")

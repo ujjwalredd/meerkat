@@ -29,7 +29,7 @@ func Decide(cmd string, p *config.Policy) (Decision, commandpolicy.Classificatio
 		d.Action = Block
 		return d, c
 	case "auto_approve":
-		if p.Mode.AutoApproveSafe {
+		if p.Mode.AutoApproveSafe && c.Risk == commandpolicy.RiskLow {
 			d.Action = Allow
 			return d, c
 		}

@@ -48,6 +48,28 @@ func TestScanIgnoresBlocked(t *testing.T) {
 	}
 }
 
+func TestScanPatternsLimitRules(t *testing.T) {
+	d := t.TempDir()
+	writeFile(t, d, "a.env", "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwx")
+	cfg := config.Default().Secrets
+	cfg.ScanPatterns = []string{"aws_access_key"}
+	findings, _ := Scan([]string{d}, &cfg, d)
+	if len(findings) != 0 {
+		t.Fatalf("scan_patterns should limit enabled rules, got %#v", findings)
+	}
+}
+
+func TestScanDisabled(t *testing.T) {
+	d := t.TempDir()
+	writeFile(t, d, "a.env", "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwx")
+	cfg := config.Default().Secrets
+	cfg.Enabled = false
+	findings, _ := Scan([]string{d}, &cfg, d)
+	if len(findings) != 0 {
+		t.Fatalf("disabled scanner should return no findings, got %#v", findings)
+	}
+}
+
 func TestRedact(t *testing.T) {
 	if r := Redact("AKIA1234567890ABCDEF"); strings.Contains(r, "1234567890") {
 		t.Errorf("redact leaked middle: %s", r)
