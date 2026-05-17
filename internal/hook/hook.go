@@ -18,6 +18,7 @@ import (
 
 	"github.com/ujjwalredd/meerkat/internal/config"
 	"github.com/ujjwalredd/meerkat/internal/decision"
+	"github.com/ujjwalredd/meerkat/internal/filesystem"
 )
 
 // hookInput is the subset of Claude Code's hook JSON we care about.
@@ -33,34 +34,105 @@ type preToolUseOut struct {
 	HookSpecificOutput map[string]any `json:"hookSpecificOutput"`
 }
 
-// PreToolUse classifies a Bash tool call. ALLOW → allow, BLOCK → deny,
-// ASK → ask (Claude Code shows its own prompt). Non-Bash tools pass.
+// PreToolUse classifies a tool call:
+//   - Bash → run command through the decision engine.
+//   - Write/Edit/MultiEdit/NotebookEdit → check path against
+//     filesystem.allowed_write_paths and blocked_paths.
+//   - Read → check path against blocked_paths only.
+//   - Anything else → pass-through.
 func PreToolUse(in io.Reader, out io.Writer, p *config.Policy) error {
 	var ev hookInput
 	if err := json.NewDecoder(in).Decode(&ev); err != nil {
 		return err
 	}
-	if ev.ToolName != "Bash" {
-		return writeJSON(out, map[string]any{}) // pass-through
+	switch ev.ToolName {
+	case "Bash":
+		return preBash(out, ev, p)
+	case "Write", "Edit", "MultiEdit", "NotebookEdit":
+		return preWrite(out, ev, p)
+	case "Read":
+		return preRead(out, ev, p)
+	default:
+		return writeJSON(out, map[string]any{})
 	}
+}
+
+func preBash(out io.Writer, ev hookInput, p *config.Policy) error {
 	cmd, _ := ev.ToolInput["command"].(string)
 	if cmd == "" {
 		return writeJSON(out, map[string]any{})
 	}
 	d, _ := decision.Decide(cmd, p)
-	perm := "ask"
-	switch d.Action {
-	case decision.Allow:
-		perm = "allow"
-	case decision.Block:
-		perm = "deny"
+	perm := mapPerm(d.Action)
+	return emitDecision(out, perm, fmt.Sprintf("meerkat: %s (%s) — %s",
+		d.Action, d.RiskLevel, joinReasons(d.Reasons)))
+}
+
+func preWrite(out io.Writer, ev hookInput, p *config.Policy) error {
+	path, _ := ev.ToolInput["file_path"].(string)
+	if path == "" {
+		path, _ = ev.ToolInput["notebook_path"].(string)
 	}
-	reason := joinReasons(d.Reasons)
+	if path == "" {
+		return writeJSON(out, map[string]any{})
+	}
+	abs, _ := filesystem.Resolve(path)
+	root, _ := filepath.Abs(p.Project.Root)
+
+	// 1. blocked paths always win
+	if filesystem.MatchAny(abs, p.FS.BlockedPaths, root) {
+		return emitDecision(out, "deny",
+			fmt.Sprintf("meerkat: BLOCK (high) — Write to blocked path: %s", path))
+	}
+	// 2. allowed_write_paths gate
+	if len(p.FS.AllowedWritePaths) == 0 {
+		// no write list configured → fall through to Claude Code's own prompt
+		return writeJSON(out, map[string]any{})
+	}
+	if filesystem.MatchAny(abs, p.FS.AllowedWritePaths, root) {
+		return emitDecision(out, "allow",
+			fmt.Sprintf("meerkat: ALLOW (low) — Write inside allowed_write_paths"))
+	}
+	// 3. outside project root with block_outside_project = strict deny
+	if p.FS.BlockOutsideProject && !filesystem.Inside(root, abs) {
+		return emitDecision(out, "deny",
+			fmt.Sprintf("meerkat: BLOCK (high) — Write outside project root: %s", path))
+	}
+	// 4. inside project but not in allowed_write_paths → ASK
+	return emitDecision(out, "ask",
+		fmt.Sprintf("meerkat: ASK — path %s not in allowed_write_paths", path))
+}
+
+func preRead(out io.Writer, ev hookInput, p *config.Policy) error {
+	path, _ := ev.ToolInput["file_path"].(string)
+	if path == "" {
+		return writeJSON(out, map[string]any{})
+	}
+	abs, _ := filesystem.Resolve(path)
+	root, _ := filepath.Abs(p.Project.Root)
+	if filesystem.MatchAny(abs, p.FS.BlockedPaths, root) {
+		return emitDecision(out, "deny",
+			fmt.Sprintf("meerkat: BLOCK (high) — Read from blocked path: %s", path))
+	}
+	return writeJSON(out, map[string]any{})
+}
+
+func mapPerm(a decision.Action) string {
+	switch a {
+	case decision.Allow:
+		return "allow"
+	case decision.Block:
+		return "deny"
+	}
+	return "ask"
+}
+
+func emitDecision(out io.Writer, perm, reason string) error {
 	return writeJSON(out, preToolUseOut{
 		HookSpecificOutput: map[string]any{
 			"hookEventName":            "PreToolUse",
 			"permissionDecision":       perm,
-			"permissionDecisionReason": fmt.Sprintf("meerkat: %s (%s) — %s", d.Action, d.RiskLevel, reason),
+			"permissionDecisionReason": reason,
 		},
 	})
 }

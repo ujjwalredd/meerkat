@@ -7,18 +7,36 @@ import (
 )
 
 // Resolve returns the real, absolute, symlink-resolved path.
-// For non-existent paths, returns absolute path without symlink resolution.
+// For non-existent paths, walks up to the nearest existing ancestor,
+// resolves that, then re-joins the missing tail. This makes path-scope
+// checks correct on macOS where /tmp is a symlink to /private/tmp.
 func Resolve(p string) (string, error) {
 	exp := ExpandTilde(p)
 	abs, err := filepath.Abs(exp)
 	if err != nil {
 		return "", err
 	}
-	real, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return abs, nil
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real, nil
 	}
-	return real, nil
+	// Walk up to nearest existing ancestor.
+	dir := abs
+	tail := ""
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return abs, nil
+		}
+		if _, err := os.Stat(parent); err == nil {
+			real, err := filepath.EvalSymlinks(parent)
+			if err != nil {
+				return abs, nil
+			}
+			return filepath.Join(real, filepath.Base(dir), tail), nil
+		}
+		tail = filepath.Join(filepath.Base(dir), tail)
+		dir = parent
+	}
 }
 
 func ExpandTilde(p string) string {

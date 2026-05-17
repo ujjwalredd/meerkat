@@ -807,7 +807,9 @@ Task: $ARGUMENTS
 		return fmt.Sprintf("%q hook %s", binPath, event)
 	}
 	hooks["PreToolUse"] = []any{map[string]any{
-		"matcher": "Bash",
+		// Match Bash AND file-mutating tools so Meerkat governs both
+		// shell commands and edits to disk.
+		"matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read",
 		"hooks": []any{map[string]any{
 			"type":    "command",
 			"command": cmdStr("pretooluse"),

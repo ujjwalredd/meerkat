@@ -5,6 +5,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `PreToolUse` hook now also classifies **Write / Edit / MultiEdit /
+  NotebookEdit / Read** tool calls (previously only Bash). File writes
+  inside `filesystem.allowed_write_paths` are auto-approved; writes to
+  `filesystem.blocked_paths` or outside `project.root` (when
+  `block_outside_project: true`) are denied. Reads of blocked paths are
+  denied. Anything else falls through to Claude Code's normal prompt.
+- `meerkat claude install` now wires the hook matcher to
+  `Bash|Write|Edit|MultiEdit|NotebookEdit|Read` instead of just `Bash`.
+
+### Fixed
+- `filesystem.Resolve` walks up to the nearest existing ancestor when
+  the target path doesn't exist yet (typical for Write tool creating
+  new files). Fixes scope-check correctness on macOS where `/tmp` is a
+  symlink to `/private/tmp` — previously a brand-new file under
+  `allowed_write_paths` could be miss-classified as outside scope.
+
+
 ## [0.3.0] - 2026-05-17
 
 ### Added — Claude Code integration (`/meerkat <prompt>`)
