@@ -5,6 +5,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-17
+
 ### Added
 - `PreToolUse` hook now also classifies **Write / Edit / MultiEdit /
   NotebookEdit / Read** tool calls (previously only Bash). File writes
@@ -14,6 +16,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   denied. Anything else falls through to Claude Code's normal prompt.
 - `meerkat claude install` now wires the hook matcher to
   `Bash|Write|Edit|MultiEdit|NotebookEdit|Read` instead of just `Bash`.
+- `scripts/install.sh` supports `MEERKAT_SETUP_CLAUDE=1` for an explicit
+  one-command CLI + Claude Code hook setup.
 
 ### Fixed
 - `filesystem.Resolve` walks up to the nearest existing ancestor when
@@ -21,7 +25,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   new files). Fixes scope-check correctness on macOS where `/tmp` is a
   symlink to `/private/tmp` — previously a brand-new file under
   `allowed_write_paths` could be miss-classified as outside scope.
+- Claude hook install/uninstall preserves unrelated user hooks and avoids
+  duplicating Meerkat hooks on reinstall.
+- `audit.redact_secrets` now redacts secret-like values in audit events before
+  writing JSONL logs.
+- `secrets.enabled` and `secrets.scan_patterns` are honored by the built-in
+  scanner.
+- Auto-approve rules no longer allow high-risk commands just because a broad
+  auto-approve pattern matched.
+- Out-of-scope writes now return a policy violation exit code when
+  `mode.deny_out_of_scope` is enabled.
 
+### Changed
+- README, install docs, and npm docs now separate "install the CLI" from
+  "enable Claude Code `/meerkat` hooks" and document what is and is not
+  protected.
+- Installer no longer requires `tar` for raw binary installs and prints clearer
+  next steps after installation.
 
 ## [0.3.0] - 2026-05-17
 
@@ -98,7 +118,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 - Stub sandbox backends `landlock`, `seccomp`, `appcontainer` (always
   reported unavailable). Native impls are tracked in
-  [`docs/v1-architecture.md`](docs/v1-architecture.md) for v0.4.
+  [`docs/v1-architecture.md`](docs/v1-architecture.md) for a future release.
 
 ## [0.1.0] - 2026-05-17
 

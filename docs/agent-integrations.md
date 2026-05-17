@@ -20,7 +20,7 @@ meerkat run --keep-awake -- npm run agent
 ```
 
 Wraps the outer agent process. Inner shell commands the agent spawns
-are **not** classified in this mode (shell-proxy lands in v0.4); use
+are **not** classified in this mode (shell-proxy is planned for v0.5); use
 path 1 or 3 for per-command enforcement.
 
 ## 3. MCP server — any MCP-aware agent
@@ -51,5 +51,5 @@ echo '{"jsonrpc":"2.0","id":1,"method":"meerkat.explain","params":{"command":"gi
 | Wrap outer agent process | shipped (`meerkat run`) |
 | Per-tool enforcement via Claude Code hooks | shipped (`meerkat claude install`) |
 | MCP `explain`/`scan`/`approve` | shipped (`meerkat mcp`) |
-| Shell-proxy mode (intercept every inner shell) | v0.4 |
-| VS Code / Cursor extension | v0.4 (reuses MCP) |
+| Shell-proxy mode (intercept every inner shell) | v0.5 |
+| VS Code / Cursor extension | v0.5 (reuses MCP) |

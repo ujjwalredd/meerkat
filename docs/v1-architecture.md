@@ -1,10 +1,10 @@
 # Meerkat v1 Architecture — Stronger Isolation, Plugins, Integrations
 
-> Status: design + shipped-implementation reference. Targets v0.3 → v1.0.
+> Status: design + shipped-implementation reference. Targets v0.4 → v1.0.
 > Default experience stays simple; advanced isolation is opt-in and only
 > after each backend is stable.
 
-## Shipped in v0.3 (this release)
+## Shipped by v0.4
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -13,9 +13,9 @@
 | Linux bubblewrap backend | ✅ shipped | requires `bwrap`; pairs with `--unshare-net` |
 | Windows Job Object marker | ✅ shipped | always-on on Windows |
 | WSL2 re-exec backend | ✅ shipped | for Windows users wanting Linux backend |
-| Landlock backend | ⏸ planned v0.4 | requires kernel-matrix testing |
-| seccomp backend | ⏸ planned v0.4 | requires libseccomp or hand-rolled BPF |
-| Windows AppContainer | ⏸ planned v0.4 | requires golang.org/x/sys/windows wiring |
+| Landlock backend | ⏸ planned v0.5 | requires kernel-matrix testing |
+| seccomp backend | ⏸ planned v0.5 | requires libseccomp or hand-rolled BPF |
+| Windows AppContainer | ⏸ planned v0.5 | requires golang.org/x/sys/windows wiring |
 | Egress proxy (HTTP CONNECT + SNI sniff) | ✅ shipped | `internal/sandbox/egress`, defeats domain fronting |
 | Plugin manager (exec-based) | ✅ shipped | `internal/plugins` |
 | gitleaks plugin adapter | ✅ shipped | activates if `gitleaks` in PATH |
@@ -25,7 +25,7 @@
 | `meerkat sandbox doctor` / `profile` | ✅ shipped | |
 | `meerkat run --sandbox=…` | ✅ shipped | |
 
-**Deferred to v0.4+:** native Landlock + seccomp syscall paths, full Windows
+**Deferred to v0.5+:** native Landlock + seccomp syscall paths, full Windows
 AppContainer + per-PID firewall, gRPC plugin bus, semgrep classifier
 plugin, VS Code extension, signed releases / SLSA provenance.
 
@@ -558,19 +558,21 @@ backend by default.
 
 ---
 
-## 11. Implementation order (v0.3 → v1.0)
+## 11. Implementation order (v0.4 → v1.0)
 
-1. **v0.3** — Shell-proxy mode, MCP approval server, agent adapter interface.
-   Plugins for `gitleaks`, `trufflehog`, `detect-secrets`. VS Code extension
-   alpha. **No sandbox backends yet.**
-2. **v0.4** — Linux Landlock + seccomp backends behind `--sandbox=` flag.
+1. **v0.3** — Sandbox backend interface, Seatbelt/bubblewrap/WSL2/Job Object
+   backends, egress proxy, MCP server, GitHub branch-protection lookup, and
+   exec-based scanner adapters.
+2. **v0.4** — Claude Code file-tool enforcement, safer install onboarding,
+   hook preservation, policy validation hardening, audit redaction fixes.
+3. **v0.5** — Linux Landlock + seccomp backends behind `--sandbox=` flag.
    Linux egress proxy + `slirp4netns` integration. Bubblewrap backend. macOS
    Seatbelt backend (best-effort). Windows Job Object always-on. WSL2 re-exec.
-3. **v0.5** — Windows AppContainer + Firewall rule integration. GitHub
+4. **v0.6** — Windows AppContainer + Firewall rule integration. GitHub
    branch-protection-aware classifier. Semgrep classifier plugin.
-4. **v0.6** — Plugin signing, plugin registry, trust UX.
-5. **v0.7** — Reproducible builds, Cosign-signed releases, SLSA provenance.
-6. **v1.0** — Stable policy schema v2 with sandbox + plugins; third-party
+5. **v0.7** — Plugin signing, plugin registry, trust UX.
+6. **v0.8** — Reproducible builds, Cosign-signed releases, SLSA provenance.
+7. **v1.0** — Stable policy schema v2 with sandbox + plugins; third-party
    security audit completed; deprecation policy in place; first LTS line.
 
 ---

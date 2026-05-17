@@ -111,7 +111,7 @@ cleanly (no prompt noise above its TUI), and keep-awake holds the laptop
 open while the agent works.
 
 The agent's **inner** shell commands are not yet intercepted by Meerkat
-(shell-proxy mode lands in v0.4). For per-tool-call approval today, use
+(shell-proxy mode is planned for v0.5). For per-tool-call approval today, use
 the MCP server:
 
 ```bash

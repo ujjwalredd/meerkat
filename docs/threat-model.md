@@ -271,15 +271,15 @@ Roadmap of controls that close known gaps. Tracked in [README.md](../README.md#r
 |---------|---------|--------|
 | v0.2 | External scanner integrations (`gitleaks`, `trufflehog`, `detect-secrets`) | Reduces T4 false-negative rate |
 | v0.2 | Better install-script detection (pre-flight `package.json` `scripts` analysis) | Strengthens T5 |
-| v0.3 | **Shell-proxy mode** — replace the agent's shell with a Meerkat-supervised shim so every inner command is classified | Closes O3 partially (inner commands become visible) |
 | v0.3 | **MCP approval server** — agent calls `meerkat.approve(tool, args)` before executing each tool | Native integration with MCP-aware agents |
-| v0.3 | Tool-call adapter for structured agent SDKs (Claude, OpenAI function calls) | Per-tool approval, not per-process |
-| v0.3 | IDE / VS Code / Cursor extension for inline approval UX | Reduces approval-fatigue clicks |
-| v0.4 | **Linux Landlock + seccomp profile** generation per policy | Closes O3, O2 partially |
-| v0.4 | **macOS Seatbelt profile** generation per policy | Same on macOS |
-| v0.4 | **Windows AppContainer / Job Object** isolation | Same on Windows |
-| v0.4 | **Egress proxy** with TLS SNI inspection + domain allow-list at packet level | Closes O6 |
-| v0.4 | Policy-file integrity (signature or hash pinning) | Closes part of (9) |
+| v0.4 | Tool-call adapter for Claude Code file/read/write hooks | Per-tool approval, not per-process |
+| v0.5 | **Shell-proxy mode** — replace the agent's shell with a Meerkat-supervised shim so every inner command is classified | Closes O3 partially (inner commands become visible) |
+| v0.5 | **Linux Landlock + seccomp profile** generation per policy | Closes O3, O2 partially |
+| v0.5 | **macOS Seatbelt profile** generation per policy | Same on macOS |
+| v0.5 | **Windows AppContainer / Job Object** isolation | Same on Windows |
+| v0.5 | **Egress proxy** with TLS SNI inspection + domain allow-list at packet level | Closes O6 |
+| v0.5 | IDE / VS Code / Cursor extension for inline approval UX | Reduces approval-fatigue clicks |
+| v0.6 | Policy-file integrity (signature or hash pinning) | Closes part of (9) |
 | v1.0 | **Signed releases** (Cosign / Sigstore) | Closes O10 for Meerkat itself |
 | v1.0 | Stable policy schema; third-party security audit | Reduces design risk |
 | v1.0 | Plugin system for custom classifiers and scanners | Extensibility without forking |

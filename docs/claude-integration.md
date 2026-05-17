@@ -23,6 +23,14 @@ cd ~/my-project
 meerkat init --profile=agent     # or basic|strict|node|python
 ```
 
+Or use the explicit one-command installer path:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ujjwalredd/meerkat/main/scripts/install.sh | MEERKAT_SETUP_CLAUDE=1 bash
+cd ~/my-project
+meerkat init --profile=agent
+```
+
 That's it. From now on, **every** Claude Code session you start runs under
 Meerkat's hooks automatically. You do not have to wrap `claude` in
 `meerkat run`. You do not have to remember anything.
@@ -99,7 +107,7 @@ Customize the auto-approve list per project: see
 
 - Hooks only see what Claude Code's tool layer exposes. Inner subshells
   spawned by an allowed command (`npm test` runs `node` which runs
-  whatever) are **not** intercepted. Shell-proxy mode lands in v0.4.
+  whatever) are **not** intercepted. Shell-proxy mode is planned for v0.5.
 - The hook's view of the policy is whatever `meerkat.yml` is on disk at
   the moment the hook fires. Editing the policy mid-session takes effect
   on the next tool call, not the running one.

@@ -9,7 +9,7 @@ Three ways to install Meerkat. Pick whichever matches your environment.
 macOS, Linux, WSL, Git-Bash, MSYS:
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/ujjwalredd/meerkat@main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ujjwalredd/meerkat/main/scripts/install.sh | bash
 ```
 
 What it does:
@@ -20,14 +20,31 @@ What it does:
 - Downloads the matching prebuilt binary.
 - Installs to `/usr/local/bin` (if writable) or `~/.local/bin`.
 - Falls back to `go install` if no prebuilt asset matches but Go 1.22+ is on PATH.
+- Prints the next steps for Claude Code and project policy setup.
+
+What it does not do by default:
+
+- It does not edit `~/.claude/settings.json`.
+- It does not create a project policy file.
+- It does not protect commands run outside Meerkat or Claude Code hooks.
 
 Environment overrides:
 
 | Env var | Purpose |
 |---------|---------|
-| `MEERKAT_VERSION=v0.3.0` | Pin a specific release |
+| `MEERKAT_VERSION=v0.4.0` | Pin a specific release |
 | `INSTALL_DIR=/path/to/bin` | Custom install location |
 | `MEERKAT_REPO=owner/name` | Use a fork |
+| `MEERKAT_SETUP_CLAUDE=1` | Also run `meerkat claude install` after installing the binary |
+
+Explicit one-command CLI + Claude Code setup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ujjwalredd/meerkat/main/scripts/install.sh | MEERKAT_SETUP_CLAUDE=1 bash
+```
+
+This is opt-in because it writes Claude Code hooks and the `/meerkat` slash
+command under `~/.claude/`.
 
 ---
 
@@ -75,7 +92,32 @@ GOOS=windows GOARCH=amd64 go build -o meerkat-windows-amd64.exe ./cmd/meerkat
 
 ---
 
-## Wire into Claude Code (MCP)
+## Enable Claude Code `/meerkat`
+
+After installing the binary:
+
+```bash
+meerkat claude install
+cd /path/to/your-project
+meerkat init --profile=agent
+```
+
+Then open Claude Code in that project and run:
+
+```text
+> /meerkat fix the bug and run tests
+```
+
+This writes the `/meerkat` slash command plus PreToolUse, SessionStart, and
+Stop hooks into `~/.claude/`. Safe commands can be auto-approved by policy,
+risky commands are asked or blocked, and macOS/Linux sessions can be kept
+awake while work runs.
+
+VS Code is covered only when it is using a Claude Code session/tool layer
+that loads those Claude hooks. Commands run directly in a terminal are covered
+only when you call them through `meerkat run -- <command>`.
+
+## Optional MCP server
 
 ```bash
 claude mcp add meerkat -- npx meerkat-cli@latest mcp start
@@ -96,7 +138,7 @@ Claude (and any MCP-aware agent) can then call `meerkat.explain`,
 ## Verify
 
 ```bash
-meerkat version            # → meerkat 0.3.0
+meerkat version            # → meerkat 0.4.0
 meerkat doctor             # → OS, git, keep-awake backend, policy validity
 meerkat sandbox doctor     # → available sandbox backends, what Auto picks
 ```
@@ -116,4 +158,7 @@ rm -rf ~/.meerkat
 
 # MCP wiring
 claude mcp remove meerkat
+
+# Claude Code hooks + /meerkat slash command
+meerkat claude uninstall
 ```

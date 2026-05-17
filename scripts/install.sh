@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Meerkat one-line installer (POSIX shells).
 #
-#   curl -fsSL https://cdn.jsdelivr.net/gh/ujjwalredd/meerkat@main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ujjwalredd/meerkat/main/scripts/install.sh | bash
 #
 # Detects OS/arch, downloads the matching prebuilt binary from
 # https://github.com/ujjwalredd/meerkat/releases, installs to
@@ -10,21 +10,22 @@
 # Falls back to `go install` if no binary matches and Go >= 1.22 is present.
 #
 # Env overrides:
-#   MEERKAT_VERSION=v0.3.0         pin a specific release
+#   MEERKAT_VERSION=v0.4.0         pin a specific release
 #   INSTALL_DIR=/path/to/bin       install location
 #   MEERKAT_REPO=owner/name        for forks
+#   MEERKAT_SETUP_CLAUDE=1         also install Claude Code /meerkat hooks
 
 set -euo pipefail
 
 REPO="${MEERKAT_REPO:-ujjwalredd/meerkat}"
 VERSION="${MEERKAT_VERSION:-latest}"
+SETUP_CLAUDE="${MEERKAT_SETUP_CLAUDE:-0}"
 
 err() { printf 'meerkat-install: %s\n' "$*" >&2; exit 1; }
 say() { printf '==> %s\n' "$*"; }
 
 need() { command -v "$1" >/dev/null 2>&1 || err "missing required tool: $1"; }
 need curl
-need tar
 need uname
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -50,9 +51,9 @@ if [ -z "${INSTALL_DIR:-}" ]; then
     INSTALL_DIR=/usr/local/bin
   else
     INSTALL_DIR="$HOME/.local/bin"
-    mkdir -p "$INSTALL_DIR"
   fi
 fi
+mkdir -p "$INSTALL_DIR"
 
 install_via_go() {
   local ver="$1"
@@ -63,6 +64,27 @@ Install Go 1.22+ (https://go.dev/dl) and rerun, or use the npm path:
   GOBIN="$INSTALL_DIR" go install "github.com/${REPO}/cmd/meerkat@${ver}" \
     || err "go install failed for ref ${ver}"
   say "installed via go: ${INSTALL_DIR}/meerkat${EXT}"
+}
+
+finish_install() {
+  "${INSTALL_DIR}/meerkat${EXT}" version || true
+
+  case ":$PATH:" in
+    *":$INSTALL_DIR:"*) ;;
+    *) say "add to your shell profile:  export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
+  esac
+
+  if [ "$SETUP_CLAUDE" = "1" ] || [ "$SETUP_CLAUDE" = "true" ]; then
+    say "configuring Claude Code hooks + /meerkat command"
+    "${INSTALL_DIR}/meerkat${EXT}" claude install \
+      || err "Claude Code setup failed. The CLI is installed; run 'meerkat claude install' manually after checking the error above."
+  else
+    say "Claude Code optional setup:  meerkat claude install"
+    say "one-command install + Claude setup:  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/scripts/install.sh | MEERKAT_SETUP_CLAUDE=1 bash"
+  fi
+
+  say "project setup:  cd into a repo and run:  meerkat init --profile=agent"
+  say "daily use:      /meerkat <task> in Claude Code, or: meerkat run -- <command>"
 }
 
 # Resolve version. No releases yet -> jump straight to go install of main.
@@ -81,12 +103,7 @@ if [ "$VERSION" = "latest" ]; then
   if [ -z "$VERSION" ]; then
     say "no published releases for ${REPO} yet (HTTP ${HTTP_CODE})"
     install_via_go "latest"
-    "${INSTALL_DIR}/meerkat${EXT}" version || true
-    say "next: cd into a project and run:  meerkat init"
-    case ":$PATH:" in
-      *":$INSTALL_DIR:"*) ;;
-      *) say "add to your shell profile:  export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
-    esac
+    finish_install
     exit 0
   fi
 fi
@@ -103,11 +120,4 @@ else
   install_via_go "${VERSION}"
 fi
 
-# PATH hint
-case ":$PATH:" in
-  *":$INSTALL_DIR:"*) ;;
-  *) say "add to your shell profile:  export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
-esac
-
-"${INSTALL_DIR}/meerkat${EXT}" version || true
-say "next: cd into a project and run:  meerkat init"
+finish_install

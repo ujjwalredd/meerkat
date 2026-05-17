@@ -77,7 +77,7 @@ sandbox:
   backend: auto                         # auto|off|seatbelt|bwrap|landlock|
                                         # seccomp|jobobject|appcontainer|wsl2
   fail_closed: true                     # BLOCK run if backend unavailable
-  allowlist_syscalls: []                # seccomp inline list (v0.4)
+  allowlist_syscalls: []                # seccomp inline list (planned v0.5)
   allowlist_paths_extra: []             # extra granted paths
   egress:
     mode: off                           # off | proxy | block

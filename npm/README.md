@@ -12,7 +12,7 @@ npx meerkat-cli@latest mcp start
 
 # Or install globally
 npm install -g meerkat-cli
-meerkat run -- claude
+meerkat claude install
 ```
 
 First invocation downloads the Go binary for your platform from
@@ -23,6 +23,22 @@ If no matching release asset exists, falls back to `go install` when Go 1.22+
 is on PATH.
 
 ## Wire into Claude Code
+
+Recommended `/meerkat` slash-command flow after global install:
+
+```bash
+meerkat claude install
+cd /path/to/your-project
+meerkat init --profile=agent
+```
+
+Then use Claude Code:
+
+```text
+> /meerkat fix the bug and run tests
+```
+
+Optional MCP server:
 
 ```bash
 claude mcp add meerkat -- npx meerkat-cli@latest mcp start
