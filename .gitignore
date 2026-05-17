@@ -1,0 +1,11 @@
+/meerkat
+/meerkat-*
+.meerkat/
+*.log
+.DS_Store
+.claude/
+.idea/
+.vscode/
+*.swp
+coverage.out
+dist/

@@ -1,0 +1,13 @@
+# Default owner for everything in the repo
+*                                @ujjwalredd
+
+# Security-critical paths require owner review
+/internal/commandpolicy/         @ujjwalredd
+/internal/decision/              @ujjwalredd
+/internal/scanner/               @ujjwalredd
+/internal/filesystem/            @ujjwalredd
+/internal/gitguard/              @ujjwalredd
+/internal/networkpolicy/         @ujjwalredd
+/SECURITY.md                     @ujjwalredd
+/docs/threat-model.md            @ujjwalredd
+/examples/                       @ujjwalredd

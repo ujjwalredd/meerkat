@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ujjwalredd/meerkat/security/advisories/new
+    about: Report security issues privately. Do NOT open a public issue.
+  - name: Question / discussion
+    url: https://github.com/ujjwalredd/meerkat/discussions
+    about: Ask questions or discuss design before filing an issue.

@@ -1,0 +1,54 @@
+version: 1
+project:
+  name: strict-example
+  root: .
+mode:
+  default_action: block
+  auto_approve_safe_actions: false
+  deny_out_of_scope: true
+  dry_run: false
+awake:
+  enabled: true
+  mode: while_command_running
+  max_duration_minutes: 60
+filesystem:
+  allowed_read_paths: [.]
+  allowed_write_paths: [./src, ./tests]
+  blocked_paths: [./.env, ./.env.*, ./secrets, ./.git/config, ~/.ssh, ~/.aws]
+  block_outside_project: true
+commands:
+  auto_approve: []
+  require_approval: [npm test, pytest, go test ./..., git diff, git status]
+  block: [sudo, su, "rm -rf /", "rm -rf ~", "chmod -R 777", chown -R, curl, wget, scp, ssh, nc, netcat, "git push --force"]
+network:
+  default: block
+  allow_domains: []
+  block_domains: [pastebin.com, webhook.site, requestbin.com]
+  require_approval_for_unknown_domains: true
+git:
+  protected_branches: [main, master, production, release]
+  block_push_to_protected_branches: true
+  require_clean_tests_before_commit: true
+  require_secret_scan_before_commit: true
+  require_secret_scan_before_push: true
+  block_force_push: true
+secrets:
+  enabled: true
+  scan_before_write: true
+  scan_before_commit: true
+  scan_before_push: true
+  scan_patterns: [aws_access_key, private_key, github_token, openai_api_key, anthropic_api_key, database_url, jwt, generic_api_key, slack_token, stripe_key]
+  ignore_paths: [./node_modules, ./.git, ./dist, ./build, ./vendor]
+  max_file_bytes: 1048576
+audit:
+  enabled: true
+  log_dir: ./.meerkat/logs
+  format: jsonl
+  include_command_output: false
+  redact_secrets: true
+approval:
+  prompt_style: compact
+  timeout_seconds: 60
+  default_on_timeout: deny
+  allow_session_approval: false
+  allow_one_time_approval: true
