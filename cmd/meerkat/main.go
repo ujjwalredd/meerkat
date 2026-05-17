@@ -16,6 +16,7 @@ import (
 	"github.com/ujjwalredd/meerkat/internal/config"
 	"github.com/ujjwalredd/meerkat/internal/decision"
 	"github.com/ujjwalredd/meerkat/internal/gitguard"
+	"github.com/ujjwalredd/meerkat/internal/hook"
 	"github.com/ujjwalredd/meerkat/internal/mcp"
 	"github.com/ujjwalredd/meerkat/internal/processrunner"
 	"github.com/ujjwalredd/meerkat/internal/sandbox"
@@ -24,12 +25,9 @@ import (
 	"github.com/ujjwalredd/meerkat/internal/ui"
 
 	// register sandbox backends (build-tagged per OS)
-	_ "github.com/ujjwalredd/meerkat/internal/sandbox/appcontainer"
 	_ "github.com/ujjwalredd/meerkat/internal/sandbox/bwrap"
 	_ "github.com/ujjwalredd/meerkat/internal/sandbox/jobobject"
-	_ "github.com/ujjwalredd/meerkat/internal/sandbox/landlock"
 	_ "github.com/ujjwalredd/meerkat/internal/sandbox/seatbelt"
-	_ "github.com/ujjwalredd/meerkat/internal/sandbox/seccomp"
 	_ "github.com/ujjwalredd/meerkat/internal/sandbox/wsl2"
 )
 
@@ -59,6 +57,10 @@ func main() {
 		os.Exit(cmdSandbox(os.Args[2:]))
 	case "mcp":
 		os.Exit(cmdMCP(os.Args[2:]))
+	case "hook":
+		os.Exit(cmdHook(os.Args[2:]))
+	case "claude":
+		os.Exit(cmdClaude(os.Args[2:]))
 	case "version", "--version", "-v":
 		fmt.Println("meerkat", Version)
 	case "help", "--help", "-h":
@@ -86,6 +88,10 @@ Usage:
   meerkat sandbox doctor                    list available isolation backends
   meerkat sandbox profile [--policy F]      show generated sandbox profile
   meerkat mcp [start] [--policy F]          run JSON-RPC MCP server on stdio
+  meerkat claude install                    install /meerkat slash cmd + hooks
+                                            in ~/.claude (auto keep-awake +
+                                            auto-approve via PreToolUse hook)
+  meerkat hook pretooluse|sessionstart|stop run a Claude Code hook (stdin JSON)
   meerkat version                           print version`)
 }
 
@@ -209,7 +215,7 @@ func cmdRun(args []string) int {
 	policyPath := fs.String("policy", "meerkat.yml", "policy file")
 	keepAwake := fs.Bool("keep-awake", false, "force keep-awake on")
 	dryRun := fs.Bool("dry-run", false, "evaluate decision, do not execute")
-	sandboxFlag := fs.String("sandbox", "", "sandbox backend: auto|off|seatbelt|bwrap|landlock|seccomp|jobobject|appcontainer|wsl2")
+	sandboxFlag := fs.String("sandbox", "", "sandbox backend: auto|off|seatbelt|bwrap|jobobject|wsl2")
 	fs.Parse(before)
 	if len(after) == 0 {
 		fmt.Fprintln(os.Stderr, "missing command after --")
@@ -693,5 +699,174 @@ func cmdMCP(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	return 0
+}
+
+func cmdHook(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: meerkat hook pretooluse|sessionstart|stop [--policy F]")
+		return 2
+	}
+	event := args[0]
+	fs := flag.NewFlagSet("hook", flag.ExitOnError)
+	policyPath := fs.String("policy", "meerkat.yml", "policy file (relative to cwd; falls back to ~/.meerkat/meerkat.yml then defaults)")
+	fs.Parse(args[1:])
+
+	p, err := config.Load(*policyPath)
+	if err != nil {
+		home, _ := os.UserHomeDir()
+		p2, err2 := config.Load(filepath.Join(home, ".meerkat", "meerkat.yml"))
+		if err2 == nil {
+			p = p2
+		} else {
+			p = config.Default()
+		}
+	}
+
+	switch event {
+	case "pretooluse":
+		if err := hook.PreToolUse(os.Stdin, os.Stdout, p); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	case "sessionstart":
+		if err := hook.SessionStart(os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	case "stop", "sessionend":
+		if err := hook.Stop(os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	default:
+		fmt.Fprintln(os.Stderr, "unknown hook event:", event)
+		return 2
+	}
+	return 0
+}
+
+func cmdClaude(args []string) int {
+	if len(args) == 0 || (args[0] != "install" && args[0] != "uninstall") {
+		fmt.Fprintln(os.Stderr, "usage: meerkat claude install|uninstall")
+		return 2
+	}
+	if args[0] == "uninstall" {
+		return claudeUninstall()
+	}
+	return claudeInstall()
+}
+
+func claudeInstall() int {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	binPath, _ := os.Executable()
+	if binPath == "" {
+		binPath = "meerkat"
+	}
+	// 1) /meerkat slash command
+	cmdDir := filepath.Join(home, ".claude", "commands")
+	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	slashPath := filepath.Join(cmdDir, "meerkat.md")
+	slashBody := `---
+description: Run a Claude task under Meerkat policy (auto keep-awake + safe auto-approval).
+argument-hint: <your prompt>
+---
+
+Run the following task. Meerkat hooks (PreToolUse, SessionStart, Stop) are
+active in this session; safe shell commands are auto-approved per the
+project's ` + "`meerkat.yml`" + ` policy, dangerous commands are blocked, and the
+machine is kept awake while you work. Treat the policy as authoritative —
+do not attempt to bypass it.
+
+Task: $ARGUMENTS
+`
+	if err := os.WriteFile(slashPath, []byte(slashBody), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Println("wrote", slashPath)
+
+	// 2) merge hooks into ~/.claude/settings.json
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	settings := map[string]any{}
+	if b, err := os.ReadFile(settingsPath); err == nil {
+		_ = json.Unmarshal(b, &settings)
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+	}
+	cmdStr := func(event string) string {
+		return fmt.Sprintf("%q hook %s", binPath, event)
+	}
+	hooks["PreToolUse"] = []any{map[string]any{
+		"matcher": "Bash",
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": cmdStr("pretooluse"),
+			"timeout": 10,
+		}},
+	}}
+	hooks["SessionStart"] = []any{map[string]any{
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": cmdStr("sessionstart"),
+			"timeout": 10,
+		}},
+	}}
+	hooks["Stop"] = []any{map[string]any{
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": cmdStr("stop"),
+			"timeout": 10,
+		}},
+	}}
+	settings["hooks"] = hooks
+	out, _ := json.MarshalIndent(settings, "", "  ")
+	if err := os.WriteFile(settingsPath, out, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Println("wired hooks in", settingsPath)
+
+	// 3) suggest MCP wiring
+	fmt.Println()
+	fmt.Println("Next:")
+	fmt.Println("  claude mcp add meerkat -- meerkat mcp start    # optional MCP server")
+	fmt.Println("  (cd into a project, run: meerkat init)")
+	fmt.Println("  Then open Claude Code and type:  /meerkat fix the auth bug")
+	return 0
+}
+
+func claudeUninstall() int {
+	home, _ := os.UserHomeDir()
+	_ = os.Remove(filepath.Join(home, ".claude", "commands", "meerkat.md"))
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	b, err := os.ReadFile(settingsPath)
+	if err == nil {
+		var s map[string]any
+		if json.Unmarshal(b, &s) == nil {
+			if hooks, ok := s["hooks"].(map[string]any); ok {
+				delete(hooks, "PreToolUse")
+				delete(hooks, "SessionStart")
+				delete(hooks, "Stop")
+				if len(hooks) == 0 {
+					delete(s, "hooks")
+				} else {
+					s["hooks"] = hooks
+				}
+			}
+			out, _ := json.MarshalIndent(s, "", "  ")
+			_ = os.WriteFile(settingsPath, out, 0o644)
+		}
+	}
+	fmt.Println("removed /meerkat slash command + Meerkat hooks from ~/.claude")
 	return 0
 }

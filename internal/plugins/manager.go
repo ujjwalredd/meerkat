@@ -1,19 +1,16 @@
 // Package plugins manages out-of-process plugins that contribute evidence
-// to the decision engine. Plugins are exec-based for v0.3: meerkat spawns
-// the binary, feeds JSON on stdin, reads JSON on stdout. gRPC over UDS is
-// planned for v0.4 once a stable plugin SDK ships.
+// to the decision engine. Plugins are exec-based: meerkat invokes the
+// binary (e.g. `gitleaks`, `trufflehog`) and parses JSON output.
 //
-// Plugins NEVER change the decision. They can only raise risk or contribute
-// findings. The decision engine remains the single source of truth.
+// Plugins NEVER change the decision. They only contribute findings.
+// The decision engine remains the single source of ALLOW/ASK/BLOCK.
 package plugins
 
 import (
 	"context"
 	"fmt"
 	"os/exec"
-	"sync"
 
-	"github.com/ujjwalredd/meerkat/internal/audit"
 	"github.com/ujjwalredd/meerkat/internal/scanner"
 )
 
@@ -24,62 +21,21 @@ type Scanner interface {
 	Scan(ctx context.Context, paths []string) ([]scanner.Finding, error)
 }
 
-// Classifier is the command-classifier plugin contract.
-type Classifier interface {
-	Name() string
-	Available() bool
-	// Classify returns extra risk level ("low"|"medium"|"high") and
-	// reasons. Core only RAISES risk; never lowers.
-	Classify(ctx context.Context, cmdline string) (risk string, reasons []string, err error)
-}
-
-// AuditSink is an additional destination for audit events.
-type AuditSink interface {
-	Name() string
-	Available() bool
-	Emit(e audit.Event) error
-}
-
-// Registry holds loaded plugins.
-type Registry struct {
-	mu          sync.RWMutex
-	scanners    []Scanner
-	classifiers []Classifier
-	sinks       []AuditSink
-}
-
-func NewRegistry() *Registry { return &Registry{} }
-
-func (r *Registry) RegisterScanner(s Scanner) {
-	r.mu.Lock()
-	r.scanners = append(r.scanners, s)
-	r.mu.Unlock()
-}
-func (r *Registry) RegisterClassifier(c Classifier) {
-	r.mu.Lock()
-	r.classifiers = append(r.classifiers, c)
-	r.mu.Unlock()
-}
-func (r *Registry) RegisterSink(s AuditSink) {
-	r.mu.Lock()
-	r.sinks = append(r.sinks, s)
-	r.mu.Unlock()
-}
-
-func (r *Registry) Scanners() []Scanner {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return append([]Scanner(nil), r.scanners...)
-}
-func (r *Registry) Classifiers() []Classifier {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return append([]Classifier(nil), r.classifiers...)
-}
-func (r *Registry) Sinks() []AuditSink {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return append([]Sink(nil), nil)[:0]
+// EnabledScanners returns the scanner plugins requested by the policy
+// whose binaries are present on PATH.
+func EnabledScanners(want []string) []Scanner {
+	all := []Scanner{Gitleaks{}, Trufflehog{}}
+	wanted := map[string]bool{}
+	for _, w := range want {
+		wanted[w] = true
+	}
+	var out []Scanner
+	for _, s := range all {
+		if wanted[s.Name()] && s.Available() {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // HasBinary is a helper for plugin Available() impls.
@@ -89,7 +45,7 @@ func HasBinary(name string) bool {
 }
 
 // MergeFindings appends plugin findings to core findings, dedup by file+line+type.
-func MergeFindings(core []scanner.Finding, extras [][]scanner.Finding) []scanner.Finding {
+func MergeFindings(core []scanner.Finding, extras ...[]scanner.Finding) []scanner.Finding {
 	seen := map[string]bool{}
 	key := func(f scanner.Finding) string { return fmt.Sprintf("%s:%d:%s", f.File, f.Line, f.Type) }
 	out := make([]scanner.Finding, 0, len(core))
@@ -109,6 +65,3 @@ func MergeFindings(core []scanner.Finding, extras [][]scanner.Finding) []scanner
 	}
 	return out
 }
-
-// type Sink alias kept for forward compat
-type Sink = AuditSink

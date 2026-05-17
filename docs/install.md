@@ -89,7 +89,7 @@ claude mcp add meerkat -- meerkat mcp start
 
 Claude (and any MCP-aware agent) can then call `meerkat.explain`,
 `meerkat.scan`, and `meerkat.approve` inline. See
-[`docs/agent-integrations.md`](agent-integrations.md) for method signatures.
+[`docs/claude-integration.md`](claude-integration.md) for the full flow.
 
 ---
 

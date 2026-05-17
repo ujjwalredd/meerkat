@@ -1,67 +1,55 @@
 # Agent integrations
 
-MeerKat is agent-agnostic. Any agent or workflow that runs as a child process
-can be wrapped:
+Meerkat is **agent-agnostic**. Three integration paths.
+
+## 1. Claude Code (recommended) — `/meerkat <prompt>`
+
+`meerkat claude install` writes a slash command + hooks. Every Claude
+Code session then runs under Meerkat automatically: keep-awake on,
+shell commands auto-approved/blocked per policy. Full recipe:
+[`claude-integration.md`](claude-integration.md).
+
+## 2. Wrap any agent with `meerkat run`
 
 ```bash
-meerkat run -- claude
-meerkat run -- codex
-meerkat run -- aider
-meerkat run -- goose
-meerkat run -- npm run agent
+meerkat run --keep-awake -- claude
+meerkat run --keep-awake -- codex
+meerkat run --keep-awake -- aider
+meerkat run --keep-awake -- goose
+meerkat run --keep-awake -- npm run agent
 ```
 
-For MVP, MeerKat supervises the **outer** process. It classifies what the
-outer process is, not every shell command the agent decides to run internally.
-A future shell-proxy mode will intercept inner commands too.
+Wraps the outer agent process. Inner shell commands the agent spawns
+are **not** classified in this mode (shell-proxy lands in v0.4); use
+path 1 or 3 for per-command enforcement.
 
-## Today (MVP)
-
-| Capability | Supported |
-|---|---|
-| Wrap and supervise outer agent process | Yes |
-| Keep-awake during agent run | Yes (macOS, Linux) |
-| Audit log of agent invocation | Yes |
-| Block agent launch if policy rejects | Yes |
-| Intercept every inner shell command the agent runs | No (v0.4, shell-proxy) |
-| Tool-call approval API for agent SDKs | Partial via MCP (v0.3) |
-| MCP approval server | **Yes (v0.3)** — `meerkat mcp` |
-
-## MCP server (shipped in v0.3)
+## 3. MCP server — any MCP-aware agent
 
 ```bash
-meerkat mcp --policy meerkat.yml
+meerkat mcp start              # JSON-RPC 2.0 on stdio
+# wire into Claude Code:
+claude mcp add meerkat -- meerkat mcp start
 ```
-
-Reads line-delimited JSON-RPC 2.0 from stdin, writes responses to stdout.
-Methods:
 
 | Method | Params | Returns |
 |--------|--------|---------|
-| `meerkat.explain` | `{ "command": "git push origin main" }` | `{ "decision": "BLOCK", "risk_level": "high", "reasons": [...] }` |
-| `meerkat.scan`    | `{ "paths": ["./src"] }`              | array of `{file,line,type,redacted}` findings |
-| `meerkat.approve` | `{ "command": "..." }`                | decision + note saying "Agent must surface this to the user; meerkat never auto-approves through MCP." |
+| `meerkat.explain` | `{"command":"git push origin main"}` | `{"decision":"BLOCK","risk_level":"high","reasons":[...]}` |
+| `meerkat.scan`    | `{"paths":["./src"]}`                | array of `{file,line,type,redacted}` findings |
+| `meerkat.approve` | `{"command":"..."}`                  | decision + note saying meerkat never auto-approves through MCP |
 
-Example one-shot:
+One-shot example:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"meerkat.explain","params":{"command":"git push origin main"}}' \
   | meerkat mcp
 ```
 
-## Future (v0.4+)
+## Today vs. future
 
-- **Shell proxy mode.** Set the agent's shell to a MeerKat-supervised shim
-  that runs each child command through the decision engine.
-- **Tool-call adapter.** For agents with structured tool calls (write_file,
-  run_shell), check the call against the policy before the tool executes.
-- **VS Code / Cursor extension.** Inline approval UI, reuses the MCP server.
-
-## Recommended pattern
-
-1. Run `meerkat init` in your project.
-2. Tune `commands.auto_approve` for what your team trusts (`npm test`,
-   `pytest`, `go test`).
-3. Leave `git push`, `npm install`, and unknown commands as ASK.
-4. Keep `mode.default_action: ask` while you learn what the agent does, then
-   tighten to `block` once you trust your auto-approve list.
+| Capability | Status |
+|---|---|
+| Wrap outer agent process | shipped (`meerkat run`) |
+| Per-tool enforcement via Claude Code hooks | shipped (`meerkat claude install`) |
+| MCP `explain`/`scan`/`approve` | shipped (`meerkat mcp`) |
+| Shell-proxy mode (intercept every inner shell) | v0.4 |
+| VS Code / Cursor extension | v0.4 (reuses MCP) |

@@ -49,9 +49,9 @@ func Auto() Backend {
 	case "darwin":
 		prefs = []string{"seatbelt"}
 	case "linux":
-		prefs = []string{"bwrap", "landlock", "seccomp"}
+		prefs = []string{"bwrap"}
 	case "windows":
-		prefs = []string{"wsl2", "appcontainer", "jobobject"}
+		prefs = []string{"wsl2", "jobobject"}
 	}
 	for _, n := range prefs {
 		if b, ok := registry[n]; ok && b.Available() {

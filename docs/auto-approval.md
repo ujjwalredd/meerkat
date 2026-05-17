@@ -119,7 +119,7 @@ claude mcp add meerkat -- meerkat mcp start
 ```
 
 The agent can then call `meerkat.explain` / `meerkat.approve` inline before
-running a tool. See [`agent-integrations.md`](agent-integrations.md).
+running a tool. See [`claude-integration.md`](claude-integration.md).
 
 ---
 

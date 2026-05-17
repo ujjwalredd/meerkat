@@ -13,9 +13,9 @@
 | Linux bubblewrap backend | ✅ shipped | requires `bwrap`; pairs with `--unshare-net` |
 | Windows Job Object marker | ✅ shipped | always-on on Windows |
 | WSL2 re-exec backend | ✅ shipped | for Windows users wanting Linux backend |
-| Landlock backend | ⏸ beta stub | reports unavailable; native syscall path gated by build tag |
-| seccomp backend | ⏸ beta stub | same |
-| Windows AppContainer | ⏸ beta stub | same |
+| Landlock backend | ⏸ planned v0.4 | requires kernel-matrix testing |
+| seccomp backend | ⏸ planned v0.4 | requires libseccomp or hand-rolled BPF |
+| Windows AppContainer | ⏸ planned v0.4 | requires golang.org/x/sys/windows wiring |
 | Egress proxy (HTTP CONNECT + SNI sniff) | ✅ shipped | `internal/sandbox/egress`, defeats domain fronting |
 | Plugin manager (exec-based) | ✅ shipped | `internal/plugins` |
 | gitleaks plugin adapter | ✅ shipped | activates if `gitleaks` in PATH |

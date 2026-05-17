@@ -17,14 +17,13 @@ internal/
   audit/                         JSONL audit logger
   ui/                            Approval prompt
   sandbox/                       Backend interface + Auto selector
-    seatbelt/                    macOS sandbox-exec (functional)
-    bwrap/                       Linux bubblewrap (functional)
-    landlock/                    Linux Landlock LSM (beta stub)
-    seccomp/                     Linux seccomp-bpf (beta stub)
-    jobobject/                   Windows Job Object (always-on)
-    appcontainer/                Windows AppContainer (beta stub)
+    seatbelt/                    macOS sandbox-exec
+    bwrap/                       Linux bubblewrap
+    jobobject/                   Windows Job Object
     wsl2/                        Windows → WSL2 re-exec
     egress/                      HTTP CONNECT + SNI-sniffing forward proxy
+  hook/                          Claude Code hook handlers
+                                 (PreToolUse, SessionStart, Stop)
   plugins/                       Exec-based plugin manager
                                  (gitleaks, trufflehog adapters)
   integrations/github/           Branch-protection lookup (1h cache)

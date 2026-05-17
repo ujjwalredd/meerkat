@@ -17,11 +17,10 @@ func (Gitleaks) Available() bool { return HasBinary("gitleaks") }
 
 // gitleaksResult is the subset of gitleaks JSON we consume.
 type gitleaksResult struct {
-	File        string `json:"File"`
-	StartLine   int    `json:"StartLine"`
-	RuleID      string `json:"RuleID"`
-	Description string `json:"Description"`
-	Secret      string `json:"Secret"`
+	File      string `json:"File"`
+	StartLine int    `json:"StartLine"`
+	RuleID    string `json:"RuleID"`
+	Secret    string `json:"Secret"`
 }
 
 func (Gitleaks) Scan(ctx context.Context, paths []string) ([]scanner.Finding, error) {
