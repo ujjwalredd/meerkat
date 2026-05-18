@@ -34,7 +34,7 @@ import (
 	_ "github.com/ujjwalredd/meerkat/internal/sandbox/wsl2"
 )
 
-var Version = "0.4.1"
+var Version = "0.4.2"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -85,7 +85,7 @@ Usage:
               [--dry-run] -- <cmd> [args]   run command under MeerKat
   meerkat scan [--policy F] [paths...]      secret + policy scan
   meerkat status [--policy F]               show runtime status
-  meerkat doctor [--online]                 check system compatibility
+  meerkat doctor [--online] [--release]     check system compatibility
   meerkat policy validate [--policy F]      validate meerkat.yml
   meerkat explain -- <cmd> [args]           explain decision without running
   meerkat sandbox doctor                    list available isolation backends
@@ -560,7 +560,8 @@ func cmdStatus(args []string) int {
 func cmdDoctor(args []string) int {
 	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
 	policyPath := fs.String("policy", "meerkat.yml", "policy file")
-	online := fs.Bool("online", false, "check latest release asset availability over the network")
+	online := fs.Bool("online", false, "check this platform's release asset availability over the network")
+	release := fs.Bool("release", false, "check all expected release assets over the network")
 	fs.Parse(args)
 
 	fmt.Println("MeerKat doctor")
@@ -600,8 +601,17 @@ func cmdDoctor(args []string) int {
 			}
 		}
 	}
-	if *online {
-		if err := checkReleaseAssetOnline(); err != nil {
+	if *release {
+		if errs := checkReleaseAssetsOnline(true); len(errs) > 0 {
+			for _, err := range errs {
+				fmt.Println("  [WARN]  release asset check:", err)
+			}
+		} else {
+			fmt.Println("  [OK]    all expected release assets exist")
+		}
+	} else if *online {
+		if errs := checkReleaseAssetsOnline(false); len(errs) > 0 {
+			err := errs[0]
 			fmt.Println("  [WARN]  release asset check:", err)
 		} else {
 			fmt.Println("  [OK]    release asset exists for this platform")
@@ -642,30 +652,63 @@ func claudeHooksInstalled() bool {
 		strings.Contains(s, "hook stop")
 }
 
-func checkReleaseAssetOnline() error {
+func checkReleaseAssetsOnline(all bool) []error {
 	version := Version
 	if version == "" || version == "dev" {
-		return fmt.Errorf("no release version embedded")
+		return []error{fmt.Errorf("no release version embedded")}
 	}
 	if !strings.HasPrefix(version, "v") {
 		version = "v" + version
 	}
-	asset := releaseAssetName(runtime.GOOS, runtime.GOARCH)
-	url := fmt.Sprintf("https://github.com/ujjwalredd/meerkat/releases/download/%s/%s", version, asset)
+	assets := []string{releaseAssetName(runtime.GOOS, runtime.GOARCH)}
+	if all {
+		assets = expectedReleaseAssets()
+	}
 	c := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest(http.MethodHead, url, nil)
-	if err != nil {
-		return err
+	var errs []error
+	for _, asset := range assets {
+		url := releaseDownloadURL(version, asset)
+		req, err := http.NewRequest(http.MethodHead, url, nil)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		resp, err := c.Do(req)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", asset, err))
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+			errs = append(errs, fmt.Errorf("%s returned HTTP %d", url, resp.StatusCode))
+		}
 	}
-	resp, err := c.Do(req)
-	if err != nil {
-		return err
+	return errs
+}
+
+func releaseDownloadURL(version, asset string) string {
+	return fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", releaseRepo(), version, asset)
+}
+
+func releaseRepo() string {
+	if repo := strings.TrimSpace(os.Getenv("MEERKAT_REPO")); repo != "" {
+		return repo
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return fmt.Errorf("%s returned HTTP %d", url, resp.StatusCode)
+	return "ujjwalredd/meerkat"
+}
+
+func expectedReleaseAssets() []string {
+	return []string{
+		releaseAssetName("darwin", "amd64"),
+		releaseAssetName("darwin", "arm64"),
+		releaseAssetName("linux", "amd64"),
+		releaseAssetName("linux", "arm64"),
+		releaseAssetName("windows", "amd64"),
+		"checksums.txt",
+		"checksums.txt.sig",
+		"checksums.txt.pem",
+		"sbom.spdx.json",
 	}
-	return nil
 }
 
 func releaseAssetName(goos, goarch string) string {

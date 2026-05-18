@@ -11,7 +11,7 @@
   <a href="https://github.com/ujjwalredd/meerkat/actions/workflows/ci.yml"><img src="https://github.com/ujjwalredd/meerkat/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/ujjwalredd/meerkat/actions/workflows/release.yml"><img src="https://github.com/ujjwalredd/meerkat/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <img src="https://img.shields.io/badge/go-1.22%2B-00ADD8.svg" alt="Go">
-  <img src="https://img.shields.io/badge/status-v0.4.1-orange.svg" alt="Status">
+  <img src="https://img.shields.io/badge/status-v0.4.2-orange.svg" alt="Status">
 </p>
 
 Local CLI security wrapper for AI coding agents and long-running developer
@@ -93,8 +93,10 @@ What is not covered:
   outside the supervised session.
 
 Short security model: [`docs/security-model.md`](docs/security-model.md).
+Known limitations: [`docs/known-limitations.md`](docs/known-limitations.md).
 FAQ: [`docs/faq.md`](docs/faq.md). Release process:
-[`docs/release.md`](docs/release.md).
+[`docs/release.md`](docs/release.md). Branch and tag protection:
+[`docs/branch-protection.md`](docs/branch-protection.md).
 
 ---
 
@@ -166,7 +168,7 @@ meerkat run [--policy F] [--keep-awake] [--sandbox=auto|seatbelt|bwrap|wsl2|off]
             [--dry-run] -- <cmd>
 meerkat scan [paths...]                 # secret + policy scan
 meerkat status                          # workspace / policy / branch / awake
-meerkat doctor                          # platform diagnostics
+meerkat doctor [--online] [--release]   # platform / release diagnostics
 meerkat sandbox doctor                  # available isolation backends
 meerkat policy validate
 meerkat explain -- <cmd>                # decision without executing
@@ -193,6 +195,7 @@ Does **not** protect against: kernel exploits, compromised toolchain,
 packet-level egress, malicious binary spawned by an allowed command,
 anything launched outside `meerkat run` or Claude Code hooks. Full
 threat model: [`docs/threat-model.md`](docs/threat-model.md).
+Known limitations: [`docs/known-limitations.md`](docs/known-limitations.md).
 
 ---
 
@@ -209,7 +212,7 @@ Example policies: [`examples/`](examples/) ·
 
 ---
 
-## Sandbox + plugins + MCP (v0.3)
+## Sandbox + plugins + MCP (v0.3+)
 
 Opt-in OS isolation, external scanners, MCP server, GitHub
 branch-protection awareness. Design + shipped status:

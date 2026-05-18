@@ -33,9 +33,10 @@ Environment overrides:
 
 | Env var | Purpose |
 |---------|---------|
-| `MEERKAT_VERSION=v0.4.1` | Pin a specific release |
+| `MEERKAT_VERSION=v0.4.2` | Pin a specific release |
 | `INSTALL_DIR=/path/to/bin` | Custom install location |
 | `MEERKAT_REPO=owner/name` | Use a fork |
+| `MEERKAT_RELEASE_BASE_URL=https://host/releases/download` | Override the release asset base URL for forks or tests |
 | `MEERKAT_SETUP_CLAUDE=1` | Also run `meerkat claude install` after installing the binary |
 | `MEERKAT_REQUIRE_CHECKSUM=1` | Fail if release checksums are unavailable |
 | `MEERKAT_INSTALL_NO_GO_FALLBACK=1` | Fail instead of falling back to `go install` |
@@ -141,9 +142,10 @@ Claude (and any MCP-aware agent) can then call `meerkat.explain`,
 ## Verify
 
 ```bash
-meerkat version            # → meerkat 0.4.1
+meerkat version            # → meerkat 0.4.2
 meerkat doctor             # → PATH, Claude hooks, policy, sandbox, keep-awake
 meerkat doctor --online    # → also checks GitHub release asset availability
+meerkat doctor --release   # → checks all expected release assets
 meerkat sandbox doctor     # → available sandbox backends, what Auto picks
 ```
 

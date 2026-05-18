@@ -62,4 +62,5 @@ There is no LLM in the security path.
 - Install from tagged GitHub Releases and verify checksums for sensitive
   environments.
 
-Full threat model: [`docs/threat-model.md`](threat-model.md).
+Full threat model: [`docs/threat-model.md`](threat-model.md). Known
+limitations: [`docs/known-limitations.md`](known-limitations.md).

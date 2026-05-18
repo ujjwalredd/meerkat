@@ -1,10 +1,12 @@
 package commandpolicy
 
 import (
-	"regexp"
+	"bytes"
+	"fmt"
 	"strings"
 
 	"github.com/ujjwalredd/meerkat/internal/config"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 type Risk int
@@ -41,10 +43,6 @@ type Classification struct {
 	MatchedPattern string // policy pattern matched (block/auto/req)
 	MatchedList    string // "block"|"auto_approve"|"require_approval"|""
 }
-
-var (
-	singleTokenBoundary = regexp.MustCompile(`^[A-Za-z0-9_.:/\\-]+$`)
-)
 
 // Classify a command line into risk + reasons, applying explicit policy lists.
 func Classify(cmd string, p *config.Policy) Classification {
@@ -191,8 +189,7 @@ type parsedSegment struct {
 	Tokens []string
 }
 
-// matchPattern: prefix match on tokens (so "npm test" matches "npm test --verbose").
-func matchPattern(cmd, pat string) bool {
+func matchRawPrefix(cmd, pat string) bool {
 	cmd = strings.TrimSpace(cmd)
 	pat = strings.TrimSpace(pat)
 	if pat == "" {
@@ -204,15 +201,6 @@ func matchPattern(cmd, pat string) bool {
 	if strings.HasPrefix(cmd, pat+" ") {
 		return true
 	}
-	// loose substring match for short single-token patterns like "sudo", "curl"
-	if !strings.Contains(pat, " ") {
-		// boundary check
-		if !singleTokenBoundary.MatchString(pat) {
-			return false
-		}
-		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(pat) + `\b`)
-		return re.MatchString(cmd)
-	}
 	return false
 }
 
@@ -221,7 +209,7 @@ func matchPatternParsed(parsed parsedCommand, rawLower, pat string) bool {
 	if pat == "" {
 		return false
 	}
-	patTokens, _ := shellFields(pat)
+	patTokens := strings.Fields(pat)
 	if len(patTokens) == 0 {
 		return false
 	}
@@ -232,7 +220,7 @@ func matchPatternParsed(parsed parsedCommand, rawLower, pat string) bool {
 				return true
 			}
 		}
-		return len(parsed.Segments) == 0 && matchPattern(rawLower, pat)
+		return len(parsed.Segments) == 0 && matchRawPrefix(rawLower, pat)
 	}
 	for _, seg := range parsed.Segments {
 		_, idx := commandName(seg.Tokens)
@@ -243,7 +231,7 @@ func matchPatternParsed(parsed parsedCommand, rawLower, pat string) bool {
 			return true
 		}
 	}
-	return matchPattern(rawLower, pat)
+	return matchRawPrefix(rawLower, pat)
 }
 
 func tokenPrefix(tokens, pat []string) bool {
@@ -263,147 +251,170 @@ func parseCommand(cmd string) parsedCommand {
 }
 
 func parseCommandDepth(cmd string, depth int) parsedCommand {
-	parts, hasControl, hasRedirection, warnings := splitShellSegments(cmd)
-	out := parsedCommand{
-		HasControl:     hasControl,
-		HasRedirection: hasRedirection,
-		Warnings:       warnings,
+	out := parsedCommand{}
+	if strings.TrimSpace(cmd) == "" {
+		return out
 	}
-	for _, part := range parts {
-		tokens, ws := shellFields(part)
-		out.Warnings = append(out.Warnings, ws...)
-		if len(tokens) == 0 {
-			continue
+
+	parser := syntax.NewParser()
+	file, err := parser.Parse(strings.NewReader(cmd), "")
+	if err != nil {
+		out.Warnings = append(out.Warnings, fmt.Sprintf("Shell parse warning: %v", err))
+		fallback := fallbackParseCommand(cmd, depth)
+		mergeParsedCommand(&out, fallback)
+		return out
+	}
+	if len(file.Stmts) > 1 {
+		out.HasControl = true
+	}
+
+	syntax.Walk(file, func(node syntax.Node) bool {
+		if node == nil {
+			return true
 		}
-		out.Segments = append(out.Segments, parsedSegment{Text: strings.Join(tokens, " "), Tokens: tokens})
-		if depth < 3 {
-			if script, ok := shellScriptArg(tokens); ok {
-				out.HasShellWrapper = true
-				child := parseCommandDepth(script, depth+1)
-				out.Segments = append(out.Segments, child.Segments...)
-				out.HasControl = out.HasControl || child.HasControl
-				out.HasRedirection = out.HasRedirection || child.HasRedirection
-				out.HasShellWrapper = out.HasShellWrapper || child.HasShellWrapper
-				out.Warnings = append(out.Warnings, child.Warnings...)
+		switch n := node.(type) {
+		case *syntax.Stmt:
+			if n.Semicolon.IsValid() || n.Background || n.Coprocess {
+				out.HasControl = true
+			}
+			if len(n.Redirs) > 0 {
+				out.HasRedirection = true
+			}
+		case *syntax.Redirect:
+			out.HasRedirection = true
+		case *syntax.BinaryCmd:
+			out.HasControl = true
+		case *syntax.Block, *syntax.CaseClause, *syntax.ForClause, *syntax.FuncDecl,
+			*syntax.IfClause, *syntax.Subshell, *syntax.WhileClause:
+			out.HasControl = true
+		case *syntax.CmdSubst:
+			out.HasControl = true
+		case *syntax.CallExpr:
+			tokens := callTokens(n)
+			if len(tokens) == 0 {
+				break
+			}
+			out.Segments = append(out.Segments, parsedSegment{
+				Text:   strings.Join(tokens, " "),
+				Tokens: tokens,
+			})
+			if depth < 3 {
+				if script, ok := shellScriptArg(tokens); ok {
+					out.HasShellWrapper = true
+					child := parseCommandDepth(script, depth+1)
+					mergeParsedCommand(&out, child)
+				}
 			}
 		}
-	}
+		return true
+	})
+
 	if len(out.Segments) == 0 && strings.TrimSpace(cmd) != "" {
 		out.Warnings = append(out.Warnings, "Command could not be tokenized safely")
 	}
 	return out
 }
 
-func splitShellSegments(cmd string) ([]string, bool, bool, []string) {
-	var parts []string
-	var b strings.Builder
-	quote := rune(0)
-	escaped := false
-	hasControl := false
-	hasRedirection := false
-	var warnings []string
-	flush := func() {
-		if s := strings.TrimSpace(b.String()); s != "" {
-			parts = append(parts, s)
-		}
-		b.Reset()
+func fallbackParseCommand(cmd string, depth int) parsedCommand {
+	out := parsedCommand{}
+	tokens := strings.Fields(cmd)
+	if len(tokens) == 0 {
+		return out
 	}
-	for i, r := range cmd {
-		if escaped {
-			b.WriteRune(r)
-			escaped = false
-			continue
-		}
-		if r == '\\' && quote != '\'' {
-			b.WriteRune(r)
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			b.WriteRune(r)
-			if r == quote {
-				quote = 0
-			}
-			continue
-		}
-		switch r {
-		case '\'', '"':
-			quote = r
-			b.WriteRune(r)
-		case ';', '\n':
-			hasControl = true
-			flush()
-		case '|':
-			hasControl = true
-			flush()
-		case '&':
-			hasControl = true
-			flush()
-		case '>', '<':
-			hasRedirection = true
-			b.WriteRune(r)
-		default:
-			_ = i
-			b.WriteRune(r)
+	out.Segments = append(out.Segments, parsedSegment{
+		Text:   strings.Join(tokens, " "),
+		Tokens: tokens,
+	})
+	if strings.ContainsAny(cmd, "|&;\n") {
+		out.HasControl = true
+	}
+	if strings.ContainsAny(cmd, "><") {
+		out.HasRedirection = true
+	}
+	if depth < 3 {
+		if script, ok := shellScriptArg(tokens); ok {
+			out.HasShellWrapper = true
+			child := parseCommandDepth(script, depth+1)
+			mergeParsedCommand(&out, child)
 		}
 	}
-	if quote != 0 {
-		warnings = append(warnings, "Unbalanced shell quote detected")
-	}
-	flush()
-	return parts, hasControl, hasRedirection, warnings
+	return out
 }
 
-func shellFields(s string) ([]string, []string) {
-	var fields []string
+func mergeParsedCommand(dst *parsedCommand, src parsedCommand) {
+	dst.Segments = append(dst.Segments, src.Segments...)
+	dst.HasControl = dst.HasControl || src.HasControl
+	dst.HasRedirection = dst.HasRedirection || src.HasRedirection
+	dst.HasShellWrapper = dst.HasShellWrapper || src.HasShellWrapper
+	dst.Warnings = append(dst.Warnings, src.Warnings...)
+}
+
+func callTokens(call *syntax.CallExpr) []string {
+	tokens := make([]string, 0, len(call.Assigns)+len(call.Args))
+	for _, assign := range call.Assigns {
+		if token := assignToken(assign); token != "" {
+			tokens = append(tokens, token)
+		}
+	}
+	for _, arg := range call.Args {
+		if token := wordLiteral(arg); token != "" {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
+}
+
+func assignToken(assign *syntax.Assign) string {
+	if assign == nil {
+		return ""
+	}
+	if assign.Name == nil {
+		return wordLiteral(assign.Value)
+	}
+	op := "="
+	if assign.Append {
+		op = "+="
+	}
+	if assign.Value == nil {
+		return assign.Name.Value + op
+	}
+	return assign.Name.Value + op + wordLiteral(assign.Value)
+}
+
+func wordLiteral(w *syntax.Word) string {
+	if w == nil {
+		return ""
+	}
+	value, ok := wordPartsLiteral(w.Parts)
+	if ok {
+		return value
+	}
+	var b bytes.Buffer
+	if err := syntax.NewPrinter().Print(&b, w); err != nil {
+		return ""
+	}
+	return b.String()
+}
+
+func wordPartsLiteral(parts []syntax.WordPart) (string, bool) {
 	var b strings.Builder
-	quote := rune(0)
-	escaped := false
-	var warnings []string
-	flush := func() {
-		if b.Len() > 0 {
-			fields = append(fields, b.String())
-			b.Reset()
-		}
-	}
-	for _, r := range s {
-		if escaped {
-			b.WriteRune(r)
-			escaped = false
-			continue
-		}
-		if r == '\\' && quote != '\'' {
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			if r == quote {
-				quote = 0
-				continue
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			b.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			b.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			value, ok := wordPartsLiteral(p.Parts)
+			if !ok {
+				return "", false
 			}
-			b.WriteRune(r)
-			continue
-		}
-		switch r {
-		case '\'', '"':
-			quote = r
-		case ' ', '\t', '\r', '\n':
-			flush()
-		case '>', '<':
-			flush()
-			fields = append(fields, string(r))
+			b.WriteString(value)
 		default:
-			b.WriteRune(r)
+			return "", false
 		}
 	}
-	if escaped {
-		b.WriteRune('\\')
-	}
-	if quote != 0 {
-		warnings = append(warnings, "Unbalanced shell quote detected")
-	}
-	flush()
-	return fields, warnings
+	return b.String(), true
 }
 
 func commandName(tokens []string) (string, int) {

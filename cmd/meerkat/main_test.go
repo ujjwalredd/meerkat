@@ -84,6 +84,38 @@ func TestOutOfScopeUsesResolvedAllowedPaths(t *testing.T) {
 	}
 }
 
+func TestExpectedReleaseAssets(t *testing.T) {
+	assets := expectedReleaseAssets()
+	want := []string{
+		"meerkat-darwin-amd64",
+		"meerkat-darwin-arm64",
+		"meerkat-linux-amd64",
+		"meerkat-linux-arm64",
+		"meerkat-windows-amd64.exe",
+		"checksums.txt",
+		"checksums.txt.sig",
+		"checksums.txt.pem",
+		"sbom.spdx.json",
+	}
+	if len(assets) != len(want) {
+		t.Fatalf("want %d release assets, got %d: %#v", len(want), len(assets), assets)
+	}
+	for i := range want {
+		if assets[i] != want[i] {
+			t.Fatalf("asset %d: want %q got %q", i, want[i], assets[i])
+		}
+	}
+}
+
+func TestReleaseDownloadURLUsesRepoOverride(t *testing.T) {
+	t.Setenv("MEERKAT_REPO", "owner/fork")
+	got := releaseDownloadURL("v1.2.3", "meerkat-linux-amd64")
+	want := "https://github.com/owner/fork/releases/download/v1.2.3/meerkat-linux-amd64"
+	if got != want {
+		t.Fatalf("want %q got %q", want, got)
+	}
+}
+
 func hasCommand(entries []any, want string) bool {
 	for _, entry := range entries {
 		m, ok := entry.(map[string]any)

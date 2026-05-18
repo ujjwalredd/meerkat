@@ -1,6 +1,6 @@
 {
   "name": "meerkat-cli",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Meerkat — vibe coding without blind trust. Local CLI security wrapper for AI coding agents.",
   "keywords": [
     "security",

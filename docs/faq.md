@@ -55,11 +55,13 @@ available. For stricter installs:
 
 ```bash
 MEERKAT_REQUIRE_CHECKSUM=1 \
+MEERKAT_INSTALL_NO_GO_FALLBACK=1 \
 curl -fsSL https://raw.githubusercontent.com/ujjwalredd/meerkat/main/scripts/install.sh | bash
 ```
 
 See [`docs/release.md`](release.md) for Cosign and GitHub attestation
-verification.
+verification. Maintainers can run `meerkat doctor --release` after publishing
+to check every expected release asset.
 
 ## What should I do if `meerkat doctor` warns about PATH?
 

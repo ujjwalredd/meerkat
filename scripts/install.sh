@@ -10,9 +10,11 @@
 # Falls back to `go install` if no binary matches and Go >= 1.22 is present.
 #
 # Env overrides:
-#   MEERKAT_VERSION=v0.4.1         pin a specific release
+#   MEERKAT_VERSION=v0.4.2         pin a specific release
 #   INSTALL_DIR=/path/to/bin       install location
 #   MEERKAT_REPO=owner/name        for forks
+#   MEERKAT_RELEASE_BASE_URL=https://host/releases/download
+#                                   override release asset base URL for tests/forks
 #   MEERKAT_SETUP_CLAUDE=1         also install Claude Code /meerkat hooks
 #   MEERKAT_REQUIRE_CHECKSUM=1     fail if checksums.txt is unavailable
 #   MEERKAT_INSTALL_NO_GO_FALLBACK=1
@@ -22,6 +24,8 @@ set -euo pipefail
 
 REPO="${MEERKAT_REPO:-ujjwalredd/meerkat}"
 VERSION="${MEERKAT_VERSION:-latest}"
+RELEASE_BASE_URL="${MEERKAT_RELEASE_BASE_URL:-https://github.com/${REPO}/releases/download}"
+RELEASE_BASE_URL="${RELEASE_BASE_URL%/}"
 SETUP_CLAUDE="${MEERKAT_SETUP_CLAUDE:-0}"
 REQUIRE_CHECKSUM="${MEERKAT_REQUIRE_CHECKSUM:-0}"
 NO_GO_FALLBACK="${MEERKAT_INSTALL_NO_GO_FALLBACK:-0}"
@@ -90,7 +94,7 @@ sha256_file() {
 verify_checksum() {
   local file="$1"
   local checksums="$TMP/checksums.txt"
-  local checksums_url="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
+  local checksums_url="${RELEASE_BASE_URL}/${VERSION}/checksums.txt"
 
   if ! curl -fsSL -o "$checksums" "$checksums_url" 2>/dev/null; then
     if [ "$REQUIRE_CHECKSUM" = "1" ] || [ "$REQUIRE_CHECKSUM" = "true" ]; then
@@ -160,7 +164,7 @@ else
 fi
 say "installing meerkat ${VERSION} for ${OS}/${ARCH}"
 
-URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
+URL="${RELEASE_BASE_URL}/${VERSION}/${ASSET}"
 
 if curl -fsSL -o "$TMP/${ASSET}" "$URL" 2>/dev/null; then
   verify_checksum "$TMP/${ASSET}"

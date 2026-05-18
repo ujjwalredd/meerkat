@@ -1,0 +1,11 @@
+{
+  "session_id": "meerkat-fixture-session",
+  "transcript_path": "/tmp/meerkat/transcript.jsonl",
+  "cwd": "__ROOT__",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "__OUTSIDE_PATH__",
+    "content": "outside\n"
+  }
+}

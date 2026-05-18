@@ -5,6 +5,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-18
+
+### Added
+- `meerkat doctor --release` checks every expected GitHub Release asset,
+  including checksums, Sigstore files, and SBOM metadata. It respects
+  `MEERKAT_REPO` for fork release checks.
+- Installer integration tests exercise local prebuilt downloads and checksum
+  failure behavior without hitting GitHub.
+- Claude `PreToolUse` hook tests now use real-ish JSON fixtures in
+  `internal/hook/testdata`.
+- New docs for known limitations and branch/tag protection.
+
+### Changed
+- Shell command classification now uses `mvdan.cc/sh/v3/syntax` instead of a
+  custom shell splitter.
+- `scripts/install.sh` supports `MEERKAT_RELEASE_BASE_URL` so tests and forks
+  can serve release assets from a controlled base URL.
+
 ## [0.4.1] - 2026-05-17
 
 ### Added

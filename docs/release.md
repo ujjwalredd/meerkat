@@ -5,12 +5,14 @@ Meerkat releases are tag-driven. Tags use the Go module format:
 
 ## Checklist
 
-1. Update versions:
+1. Confirm branch and tag protection match
+   [`docs/branch-protection.md`](branch-protection.md).
+2. Update versions:
    - `cmd/meerkat/main.go`
    - `npm/package.json`
    - README and install docs examples
    - `CHANGELOG.md`
-2. Run local verification:
+3. Run local verification:
 
    ```bash
    go test ./...
@@ -21,7 +23,7 @@ Meerkat releases are tag-driven. Tags use the Go module format:
    make release-local
    ```
 
-3. Commit and tag:
+4. Commit and tag:
 
    ```bash
    git add .
@@ -31,7 +33,17 @@ Meerkat releases are tag-driven. Tags use the Go module format:
    git push origin vX.Y.Z
    ```
 
-4. GitHub Actions creates the release from the tag.
+5. GitHub Actions creates the release from the tag.
+6. Verify the published release:
+
+   ```bash
+   meerkat doctor --release
+   ```
+
+   For forks, set `MEERKAT_REPO=owner/name` before running the doctor.
+
+If a published tag is wrong, do not overwrite it. Create the next patch tag
+and document the mistake in `CHANGELOG.md`.
 
 ## What CI publishes
 
